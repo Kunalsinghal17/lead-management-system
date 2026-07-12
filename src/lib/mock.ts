@@ -549,7 +549,7 @@ export function mockDashboard(days = 30): DashboardSummary {
     trend.push({ date: key, count: active.filter(l => l.createdAtUtc.slice(0, 10) === key).length });
   }
 
-  const group = (arr: Lead[], key: (l: Lead) => string | null) => {
+  const group = (arr: Lead[], key: (l: Lead) => string | null | undefined) => {
     const map = new Map<string, number>();
     for (const l of arr) {
       const k = key(l);
