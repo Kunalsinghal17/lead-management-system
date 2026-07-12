@@ -6,13 +6,14 @@ export const Route = createFileRoute("/")({
 
 function Index() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-background px-6">
-      <div className="max-w-md text-center">
-        <h1 className="text-3xl font-semibold tracking-tight text-foreground">
-          Blank project
+    <main className="flex min-h-screen items-center justify-center bg-background px-6 py-16">
+      <div className="w-full max-w-xl text-center">
+        <p className="text-sm font-medium text-muted-foreground">Preview is working</p>
+        <h1 className="mt-3 text-4xl font-semibold tracking-tight text-foreground">
+          Blank project ready
         </h1>
-        <p className="mt-3 text-sm text-muted-foreground">
-          Ready for your GitHub repo. Connect it and your files will appear here.
+        <p className="mx-auto mt-4 max-w-md text-base text-muted-foreground">
+          This clean starter is ready for you to connect a GitHub repo and bring in your files.
         </p>
       </div>
     </main>
