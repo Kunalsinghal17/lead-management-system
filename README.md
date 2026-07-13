@@ -42,12 +42,17 @@ npm run dev
 
 Open **http://localhost:5173** and sign in:
 
-| Role | Email | Password |
-|---|---|---|
-| Admin | admin@nexdigm.com | Admin@123 |
-| Manager | manager@nexdigm.com | Manager@123 |
-| Executive | executive@nexdigm.com | Exec@123 |
-| Basic | basic@nexdigm.com | Basic@123 |
+| Role | Name | Email | Password |
+|---|---|---|---|
+| Admin | Harshit Mishra | harshit.mishra@nexdigm.com | Admin@123 |
+| Manager | Harsh Mittal | harsh.mittal@nexdigm.com | Manager@123 |
+| Executive | Aditi Sharma | aditi.sharma@nexdigm.com | Exec@123 |
+| Executive | Rohan Kulkarni | rohan.kulkarni@nexdigm.com | Exec@123 |
+| Executive | Neha Joshi | neha.joshi@nexdigm.com | Exec@123 |
+| Basic | Priyank Desai | priyank.desai@nexdigm.com | Basic@123 |
+
+Leads are owned and handled by **Executives** (Admin/Manager oversee, re-assign and escalate).
+This is driven by the editable permission matrix below, not hard-coded.
 
 The database is created and seeded automatically on first API start — masters, the four
 users above, ~55 realistic sample leads and visitor analytics data.
@@ -82,7 +87,7 @@ To point a hosted frontend at a hosted API, set `VITE_API_URL` (see `.env.exampl
 
 | BRD ID | Requirement | Where |
 |---|---|---|
-| BRDID01 | User login & role access (page/field/action level) | `AuthController`, JWT roles, `auth.tsx`, role matrix on Users & Roles page |
+| BRDID01 | User login & role access (page/field/action level), **editable permission matrix** | `AuthController`, JWT roles, `PermissionService` (DB-stored matrix, Admin edits it on Users & Roles; API enforces per request) |
 | BRDID02 | Web ingestion from MarketRAdmin (real-time API) | `POST /api/ingest/enquiry` (X-Api-Key), "Simulate web enquiry" on Dashboard |
 | BRDID03 | Auto + manual lead creation, uniform schema, defaults | `LeadService.CreateLeadAsync`, Create Lead modal |
 | BRDID04 | Central assignment — pool, single owner, Admin/Manager re-assign | Central Pool page, `POST /api/leads/{id}/assign` |
@@ -152,11 +157,20 @@ nexdigm-lms/
 
 - `POST /api/auth/login`
 - `GET/POST/PUT/DELETE /api/leads` (+ `/assign`, `/day-updates`, `/export`)
-- `GET /api/dashboard/summary`, `GET /api/masters`, `GET/POST /api/users`
+- `GET /api/dashboard/summary`, `GET /api/masters`, `GET/POST /api/users`, `GET /api/users/assignable`
+- `GET/PUT /api/permissions` (editable role matrix; PUT is Admin-only)
 - `GET /api/bulk-upload/template`, `POST /api/bulk-upload`
 - `GET /api/visitors`, `GET /api/visitors/export`, `POST /api/visitors/ingest` (API key)
 - `POST /api/ingest/enquiry` (API key), `POST /api/ingest/simulate`
 - `GET /api/notifications`, `POST /api/notifications/run-now`
+
+## Where visitor analytics data comes from
+
+The IPs/visits on the Visitor Analytics page are **seeded demo data** (BRDID13 demo).
+There is no built-in website tracker — in production your website/SEO tool must push
+events to `POST /api/visitors/ingest` with the `X-Api-Key` header and body
+`{ "ipAddress": "…", "timeSpentSeconds": 123, "visitAt": "…" }`. The LMS aggregates
+time-on-site and visit counts per IP and correlates them with lead IPs.
 
 ## Integrating the real MarketRAdmin
 
