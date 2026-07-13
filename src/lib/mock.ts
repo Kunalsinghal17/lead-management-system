@@ -680,8 +680,8 @@ export function mockDashboard(days = 30): DashboardSummary {
     leadsPerDay: trend,
     bySource: group(active, l => l.source),
     byStage: group(real, l => l.stage),
-    byIndustry: group(real, l => l.industry).slice(0, 8),
-    lostReasons: group(real.filter(l => l.status === "Lost"), l => l.lostReason)
+    byIndustry: group(real, l => l.industry ?? null).slice(0, 8),
+    lostReasons: group(real.filter(l => l.status === "Lost"), l => l.lostReason ?? null)
   };
 }
 
