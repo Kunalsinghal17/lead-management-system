@@ -68,6 +68,7 @@ else
 // ---------------------------------------------------------------- services
 builder.Services.AddScoped<IAuthProvider, DbAuthProvider>();   // AD/Entra provider slots in here later
 builder.Services.AddSingleton<TokenService>();
+builder.Services.AddScoped<PermissionService>();
 builder.Services.AddScoped<LeadService>();
 builder.Services.AddScoped<ExcelService>();
 builder.Services.AddScoped<IEmailService, EmailService>();

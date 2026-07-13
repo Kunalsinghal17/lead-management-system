@@ -15,6 +15,7 @@ public static class DbSeeder
         if (!config.GetValue<bool>("Seed:Enabled", true)) return;
 
         await SeedMastersAsync(db);
+        await PermissionService.SeedDefaultsAsync(db);
         await SeedUsersAsync(db);
 
         if (config.GetValue<bool>("Seed:SampleLeads", true))
@@ -62,38 +63,41 @@ public static class DbSeeder
 
         var admin = new User
         {
-            FullName = "LMS Admin",
-            Email = "admin@nexdigm.com",
+            FullName = "Harshit Mishra",
+            Email = "harshit.mishra@nexdigm.com",
             PasswordHash = PasswordHasher.Hash("Admin@123"),
             Role = UserRole.Admin
         };
         var manager = new User
         {
-            FullName = "LMS Manager",
-            Email = "manager@nexdigm.com",
+            FullName = "Harsh Mittal",
+            Email = "harsh.mittal@nexdigm.com",
             PasswordHash = PasswordHasher.Hash("Manager@123"),
             Role = UserRole.Manager
         };
         db.Users.AddRange(admin, manager);
         await db.SaveChangesAsync();
 
-        var executive = new User
+        // Executives are the lead handlers (per "Own / Handle Leads" permission)
+        var executives = new[]
         {
-            FullName = "LMS Executive",
-            Email = "executive@nexdigm.com",
-            PasswordHash = PasswordHasher.Hash("Exec@123"),
-            Role = UserRole.Executive,
-            ManagerId = manager.Id
+            new User { FullName = "Aditi Sharma", Email = "aditi.sharma@nexdigm.com",
+                PasswordHash = PasswordHasher.Hash("Exec@123"), Role = UserRole.Executive, ManagerId = manager.Id },
+            new User { FullName = "Rohan Kulkarni", Email = "rohan.kulkarni@nexdigm.com",
+                PasswordHash = PasswordHasher.Hash("Exec@123"), Role = UserRole.Executive, ManagerId = manager.Id },
+            new User { FullName = "Neha Joshi", Email = "neha.joshi@nexdigm.com",
+                PasswordHash = PasswordHasher.Hash("Exec@123"), Role = UserRole.Executive, ManagerId = manager.Id }
         };
         var basic = new User
         {
-            FullName = "LMS Basic",
-            Email = "basic@nexdigm.com",
+            FullName = "Priyank Desai",
+            Email = "priyank.desai@nexdigm.com",
             PasswordHash = PasswordHasher.Hash("Basic@123"),
             Role = UserRole.Basic,
             ManagerId = manager.Id
         };
-        db.Users.AddRange(executive, basic);
+        db.Users.AddRange(executives);
+        db.Users.Add(basic);
         await db.SaveChangesAsync();
     }
 
@@ -104,10 +108,8 @@ public static class DbSeeder
         if (await db.Leads.AnyAsync()) return;
 
         var users = await db.Users.ToListAsync();
-        var admin = users.First(u => u.Role == UserRole.Admin);
-        var manager = users.First(u => u.Role == UserRole.Manager);
-        var executive = users.First(u => u.Role == UserRole.Executive);
-        var basic = users.First(u => u.Role == UserRole.Basic);
+        // Leads are handled by Executives only (default "Own / Handle Leads" permission)
+        var executives = users.Where(u => u.Role == UserRole.Executive).ToList();
 
         var industries = await db.MasterItems.Where(m => m.Type == "Industry").Select(m => m.Value).ToListAsync();
         var ctas = await db.MasterItems.Where(m => m.Type == "Cta").Select(m => m.Value).ToListAsync();
@@ -177,14 +179,14 @@ public static class DbSeeder
             else if (bucket < 28)
             {
                 // Classified Not-Lead → closed by system
-                Assign(lead, PickOwner(rnd, executive, basic, manager), created.AddHours(rnd.Next(1, 24)));
+                Assign(lead, executives[rnd.Next(executives.Count)], created.AddHours(rnd.Next(1, 24)));
                 lead.EnquiryType = EnquiryType.NotLead;
                 lead.Status = LeadStatus.Closed;
                 lead.ClosedAtUtc = created.AddHours(rnd.Next(24, 72));
             }
             else
             {
-                var owner = PickOwner(rnd, executive, basic, manager);
+                var owner = executives[rnd.Next(executives.Count)];
                 Assign(lead, owner, created.AddHours(rnd.Next(1, 24)));
                 lead.EnquiryType = EnquiryType.Lead;
                 lead.LeadType = rnd.NextDouble() > 0.5 ? LeadType.Custom : LeadType.Syndicate;
@@ -248,9 +250,6 @@ public static class DbSeeder
             var abbr = new[] { "BFS", "HLC", "TEC", "MFG", "ENR", "RTL", "LOG", "PHM" };
             return abbr[rnd.Next(abbr.Length)];
         }
-
-        static User PickOwner(Random rnd, User executive, User basic, User manager) =>
-            rnd.Next(10) switch { < 5 => executive, < 8 => basic, _ => manager };
 
         static void Assign(Lead lead, User owner, DateTime whenUtc)
         {

@@ -1,16 +1,21 @@
 import React, { useEffect, useState } from "react";
-import { BellRing, Check, Minus, UserPlus } from "lucide-react";
+import { BellRing, RotateCcw, Save, UserPlus } from "lucide-react";
 import { api, ApiError } from "../lib/api";
-import { Masters, NotificationRow, Role, UserRow } from "../lib/types";
+import { NotificationRow, PERMISSION_LABELS, PermissionMatrix, Role, UserRow } from "../lib/types";
 import { formatDateTime } from "../lib/format";
+import { useAuth } from "../lib/auth";
+
+const ROLES: Role[] = ["Admin", "Manager", "Executive", "Basic"];
 
 /**
- * BRDID01 — Users & role/access matrix (Admin only) plus the
- * notification/escalation outbox (BRDID10) for auditability.
+ * BRDID01 — Users, the EDITABLE role/access matrix (stored in the database,
+ * enforced by the API on every request) and the notification outbox (BRDID10).
  */
 export default function UsersRoles() {
+  const { refreshPermissions } = useAuth();
   const [users, setUsers] = useState<UserRow[]>([]);
-  const [masters, setMasters] = useState<Masters | null>(null);
+  const [matrix, setMatrix] = useState<PermissionMatrix | null>(null);
+  const [savedMatrix, setSavedMatrix] = useState<string>("");
   const [logs, setLogs] = useState<NotificationRow[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -18,13 +23,46 @@ export default function UsersRoles() {
   const [busy, setBusy] = useState(false);
 
   const load = async () => {
-    const [u, m, n] = await Promise.all([api.users(), api.masters(), api.notifications()]);
+    const [u, m, n] = await Promise.all([api.users(), api.permissions(), api.notifications()]);
     setUsers(u);
-    setMasters(m);
+    setMatrix(m);
+    setSavedMatrix(JSON.stringify(m));
     setLogs(n);
   };
 
   useEffect(() => { load().catch(() => {}); }, []);
+
+  const dirty = matrix !== null && JSON.stringify(matrix) !== savedMatrix;
+
+  const toggle = (action: string, role: Role) => {
+    if (action === "AddUser" && role === "Admin") return; // lockout guard
+    setMatrix(m => {
+      if (!m) return m;
+      return { ...m, [action]: { ...m[action], [role]: !m[action][role] } };
+    });
+  };
+
+  const savePermissions = async () => {
+    if (!matrix) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await api.updatePermissions(matrix);
+      setMatrix(updated);
+      setSavedMatrix(JSON.stringify(updated));
+      await refreshPermissions();
+      setNotice("Permissions saved — they apply immediately across the app and the API.");
+      window.setTimeout(() => setNotice(null), 4000);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not save permissions.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const discard = () => {
+    if (savedMatrix) setMatrix(JSON.parse(savedMatrix));
+  };
 
   const runSweep = async () => {
     setBusy(true);
@@ -115,32 +153,75 @@ export default function UsersRoles() {
         </table>
       </div>
 
-      {/* Role matrix */}
-      {masters && (
+      {/* Editable role matrix */}
+      {matrix && (
         <div className="mb-6 rounded-lg border border-[#DFDDDD]">
-          <div className="border-b border-[#DFDDDD] px-4 py-3 text-sm font-bold text-[#333333]">
-            Role & access mapping (Master)
+          <div className="flex items-center justify-between border-b border-[#DFDDDD] px-4 py-3">
+            <div>
+              <div className="text-sm font-bold text-[#333333]">Role & access mapping</div>
+              <div className="text-xs text-[#808081]">
+                Click any cell to toggle. Saved settings are stored in the database and enforced by
+                the API on every request. "Add User" stays locked for Admin so access can always be recovered.
+              </div>
+            </div>
+            {dirty && (
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  onClick={discard}
+                  disabled={busy}
+                  className="flex items-center gap-1 rounded-md border border-[#CAC8C7] px-3 py-1.5 text-xs font-bold text-[#333333] hover:bg-[#DFDDDD]"
+                >
+                  <RotateCcw size={12} /> Discard
+                </button>
+                <button
+                  onClick={savePermissions}
+                  disabled={busy}
+                  className="flex items-center gap-1 rounded-md bg-[#645BA8] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#2C2561] disabled:opacity-50"
+                >
+                  <Save size={12} /> {busy ? "Saving…" : "Save changes"}
+                </button>
+              </div>
+            )}
           </div>
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="text-xs uppercase tracking-wide text-[#808081]">
                 <th className="px-4 py-2 font-bold">Action</th>
-                {["Admin", "Manager", "Executive", "Basic"].map(r => (
+                {ROLES.map(r => (
                   <th key={r} className="px-4 py-2 text-center font-bold">{r}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {Object.entries(masters.roleMatrix).map(([action, roles]) => (
+              {Object.keys(PERMISSION_LABELS).map(action => (
                 <tr key={action} className="border-t border-[#DFDDDD]">
-                  <td className="px-4 py-2 font-bold text-[#333333]">{action}</td>
-                  {["Admin", "Manager", "Executive", "Basic"].map(r => (
-                    <td key={r} className="px-4 py-2 text-center">
-                      {roles[r]
-                        ? <Check size={15} className="mx-auto text-[#2D7D3E]" />
-                        : <Minus size={15} className="mx-auto text-[#CAC8C7]" />}
-                    </td>
-                  ))}
+                  <td className="px-4 py-2 font-bold text-[#333333]">{PERMISSION_LABELS[action]}</td>
+                  {ROLES.map(role => {
+                    const allowed = matrix[action]?.[role] ?? false;
+                    const locked = action === "AddUser" && role === "Admin";
+                    return (
+                      <td key={role} className="px-4 py-2 text-center">
+                        <button
+                          onClick={() => toggle(action, role)}
+                          disabled={locked || busy}
+                          aria-label={`${PERMISSION_LABELS[action]} for ${role}: ${allowed ? "allowed" : "not allowed"}`}
+                          className="mx-auto block rounded-full transition-opacity disabled:cursor-not-allowed"
+                          style={{ opacity: locked ? 0.6 : 1 }}
+                          title={locked ? "Locked to prevent Admin lockout" : "Click to toggle"}
+                        >
+                          <span
+                            className="inline-flex h-5 w-9 items-center rounded-full p-0.5 transition-colors"
+                            style={{ backgroundColor: allowed ? "#2D7D3E" : "#CAC8C7" }}
+                          >
+                            <span
+                              className="h-4 w-4 rounded-full bg-white transition-transform"
+                              style={{ transform: allowed ? "translateX(16px)" : "translateX(0)" }}
+                            />
+                          </span>
+                        </button>
+                      </td>
+                    );
+                  })}
                 </tr>
               ))}
             </tbody>

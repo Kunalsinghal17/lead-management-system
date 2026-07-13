@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Eye, EyeOff, Lock } from "lucide-react";
 import { useAuth } from "../lib/auth";
+import NexdigmLogo from "../components/NexdigmLogo";
 
 /**
  * BRDID01 — login. Masked password, generic error messages, credentials
@@ -35,16 +36,10 @@ export default function Login() {
         style={{ background: "linear-gradient(160deg, #211C48 0%, #2C2561 55%, #645BA8 130%)" }}
       >
         <div className="flex items-center gap-3">
-          <div
-            className="flex h-10 w-10 items-center justify-center rounded-lg text-xl font-bold text-white"
-            style={{ background: "linear-gradient(135deg, #645BA8, #C86AA9)" }}
-          >
-            N
-          </div>
-          <div className="text-white">
-            <div className="font-bold leading-tight">Nexdigm</div>
-            <div className="text-xs text-[#C6BDDD]">Lead Management System</div>
-          </div>
+          <NexdigmLogo height={26} onDark />
+          <span className="text-xs font-bold uppercase tracking-[0.14em] text-[#C6BDDD]">
+            Lead Management System
+          </span>
         </div>
 
         <div>
@@ -70,13 +65,8 @@ export default function Login() {
       <div className="flex flex-1 items-center justify-center bg-white p-8">
         <form onSubmit={submit} className="w-full max-w-sm">
           <div className="mb-8 lg:hidden">
-            <div
-              className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg text-xl font-bold text-white"
-              style={{ background: "linear-gradient(135deg, #645BA8, #C86AA9)" }}
-            >
-              N
-            </div>
-            <div className="font-bold text-[#333333]">Nexdigm — Lead Management System</div>
+            <NexdigmLogo height={26} />
+            <div className="mt-2 font-bold text-[#333333]">Lead Management System</div>
           </div>
 
           <h2 className="text-xl font-bold text-[#333333]">Sign in</h2>
@@ -142,8 +132,9 @@ export default function Login() {
           <div className="mt-6 flex items-start gap-2 rounded-md bg-[#DFDDDD] bg-opacity-40 p-3 text-xs text-[#808081]">
             <Lock size={14 } className="mt-0.5 shrink-0" />
             <span>
-              Demo accounts — admin@nexdigm.com / Admin@123 · manager@nexdigm.com / Manager@123 ·
-              executive@nexdigm.com / Exec@123 · basic@nexdigm.com / Basic@123
+              Demo accounts — harshit.mishra@nexdigm.com / Admin@123 · harsh.mittal@nexdigm.com /
+              Manager@123 · aditi.sharma@nexdigm.com / Exec@123 (also rohan.kulkarni, neha.joshi) ·
+              priyank.desai@nexdigm.com / Basic@123
             </span>
           </div>
         </form>

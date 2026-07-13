@@ -16,8 +16,13 @@ public class BusinessRuleException : Exception
 public class LeadService
 {
     private readonly LmsDbContext _db;
+    private readonly PermissionService _permissions;
 
-    public LeadService(LmsDbContext db) => _db = db;
+    public LeadService(LmsDbContext db, PermissionService permissions)
+    {
+        _db = db;
+        _permissions = permissions;
+    }
 
     // ---------------------------------------------------------------- mapping
 
@@ -130,15 +135,20 @@ public class LeadService
         var target = await _db.Users.FirstOrDefaultAsync(u => u.Id == targetUserId && u.IsActive, ct)
             ?? throw new BusinessRuleException("Target user not found or inactive.");
 
+        // Only roles with "Own / Handle Leads" can be lead handlers (default: Executives).
+        if (!await _permissions.IsAllowedAsync(target.Role, PermissionActions.OwnLeads, ct))
+            throw new BusinessRuleException(
+                $"{target.FullName} ({target.Role}) cannot own leads. Leads can only be assigned to roles " +
+                "with the 'Own / Handle Leads' permission (see Users & Roles).");
+
         var isReassignment = lead.AssignedToUserId.HasValue && lead.AssignedToUserId != targetUserId;
 
-        // Picking from the central pool: any authorized user may pick a lead for themselves.
-        // Re-assignment of an owned lead: Admin/Manager only (BRDID04).
-        if (isReassignment && actingRole is not (UserRole.Admin or UserRole.Manager))
-            throw new BusinessRuleException("Only Admin or Manager can re-assign an owned lead.", 403);
-        if (!isReassignment && lead.AssignedToUserId is null &&
-            targetUserId != actingUserId && actingRole is not (UserRole.Admin or UserRole.Manager))
-            throw new BusinessRuleException("You can only pick pool leads for yourself.", 403);
+        // Picking from the central pool for yourself needs OwnLeads (checked above for the target).
+        // Assigning to someone else — pool or re-assignment — needs the Reassign permission.
+        if ((isReassignment || targetUserId != actingUserId) &&
+            !await _permissions.IsAllowedAsync(actingRole, PermissionActions.Reassign, ct))
+            throw new BusinessRuleException(
+                "Your role does not have the 'Re-assignment of leads' permission.", 403);
 
         lead.AssignedToUserId = target.Id;
         lead.AssignedAtUtc ??= DateTime.UtcNow;

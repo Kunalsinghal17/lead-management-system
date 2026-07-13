@@ -18,11 +18,13 @@ public class ExcelService
 
     private readonly LmsDbContext _db;
     private readonly LeadService _leads;
+    private readonly PermissionService _permissions;
 
-    public ExcelService(LmsDbContext db, LeadService leads)
+    public ExcelService(LmsDbContext db, LeadService leads, PermissionService permissions)
     {
         _db = db;
         _leads = leads;
+        _permissions = permissions;
     }
 
     public byte[] BuildTemplate()
@@ -48,7 +50,7 @@ public class ExcelService
         ws.Cell(2, 6).Value = "Healthcare";
         ws.Cell(2, 7).Value = "Enquiry";
         ws.Cell(2, 8).Value = "Open";
-        ws.Cell(2, 9).Value = "executive@nexdigm.com";
+        ws.Cell(2, 9).Value = "aditi.sharma@nexdigm.com";
         ws.Cell(2, 10).Value = 250000;
         ws.Cell(2, 11).Value = "Migrated from legacy tracker";
 
@@ -57,7 +59,7 @@ public class ExcelService
         hints.Cell(2, 1).Value = "Do not rename, remove or reorder columns on the 'Leads' sheet.";
         hints.Cell(3, 1).Value = "Stage: Enquiry / Lead / Proposal / Won / Lost";
         hints.Cell(4, 1).Value = "Status: Open / Won / Lost";
-        hints.Cell(5, 1).Value = "Enquiry Handled By: email of an existing LMS user (optional)";
+        hints.Cell(5, 1).Value = "Enquiry Handled By: email of a user allowed to own leads, e.g. an Executive (optional)";
         hints.Cell(6, 1).Value = "Name and Email are mandatory. Duplicate emails already in LMS are rejected.";
 
         ws.Columns().AdjustToContents();
@@ -85,8 +87,10 @@ public class ExcelService
         var inserted = 0;
         var total = 0;
 
+        // Valid handlers = roles with the "Own / Handle Leads" permission (default: Executives)
+        var handlerRoles = await _permissions.RolesWithAsync(PermissionActions.OwnLeads, ct);
         var usersByEmail = await _db.Users
-            .Where(u => u.IsActive)
+            .Where(u => u.IsActive && handlerRoles.Contains(u.Role))
             .ToDictionaryAsync(u => u.Email.ToLowerInvariant(), u => u.Id, ct);
 
         var existingEmails = new HashSet<string>(
@@ -149,7 +153,7 @@ public class ExcelService
             if (!string.IsNullOrWhiteSpace(handledBy))
             {
                 if (!usersByEmail.TryGetValue(handledBy.ToLowerInvariant(), out var uid))
-                { errors.Add(new BulkRowError(row, $"'Enquiry Handled By' user '{handledBy}' not found in LMS.")); continue; }
+                { errors.Add(new BulkRowError(row, $"'Enquiry Handled By' user '{handledBy}' not found or not allowed to own leads.")); continue; }
                 assignedId = uid;
             }
 

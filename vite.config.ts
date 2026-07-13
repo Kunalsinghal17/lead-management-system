@@ -1,6 +1,5 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import path from "path";
 
 // Nexdigm LMS frontend.
 // In local development the Vite dev server proxies /api to the ASP.NET Core API.
@@ -8,11 +7,6 @@ import path from "path";
 // built-in mock data layer, so it renders fully without the backend.
 export default defineConfig({
   plugins: [react()],
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
-    },
-  },
   server: {
     port: 5173,
     proxy: {

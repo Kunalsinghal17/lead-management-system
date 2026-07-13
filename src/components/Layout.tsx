@@ -5,7 +5,8 @@ import {
   ShieldCheck, LogOut, CircleUserRound, Radio
 } from "lucide-react";
 import { useAuth } from "../lib/auth";
-import { api, apiMode } from "../lib/api";
+import { api, apiMode, DATA_CHANGED_EVENT } from "../lib/api";
+import NexdigmLogo from "./NexdigmLogo";
 
 /**
  * App shell — deep-purple brand sidebar (Nexdigm Purple Shade 2 #211C48)
@@ -23,8 +24,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     const refresh = () =>
       api.listLeads({ view: "pool" }).then(l => { if (alive) setPoolCount(l.length); }).catch(() => {});
     refresh();
+    // Instant refresh on any mutation (assignment, creation, upload, ...) +
+    // a slow poll as a safety net for changes made by other users.
+    window.addEventListener(DATA_CHANGED_EVENT, refresh);
     const t = window.setInterval(refresh, 30_000);
-    return () => { alive = false; window.clearInterval(t); };
+    return () => {
+      alive = false;
+      window.removeEventListener(DATA_CHANGED_EVENT, refresh);
+      window.clearInterval(t);
+    };
   }, []);
 
   const nav = [
@@ -54,17 +62,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     <div className="flex h-screen overflow-hidden bg-white">
       {/* Sidebar */}
       <aside className="flex w-60 shrink-0 flex-col bg-[#211C48]">
-        <div className="flex items-center gap-2.5 px-4 py-5">
-          <div
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-lg font-bold text-white"
-            style={{ background: "linear-gradient(135deg, #645BA8, #C86AA9)" }}
-            aria-hidden
-          >
-            N
-          </div>
-          <div>
-            <div className="text-sm font-bold leading-tight text-white">Nexdigm</div>
-            <div className="text-[11px] leading-tight text-[#9F91C6]">Lead Management System</div>
+        <div className="px-4 py-5">
+          <NexdigmLogo height={24} onDark />
+          <div className="mt-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#9F91C6]">
+            Lead Management System
           </div>
         </div>
 
@@ -105,9 +106,20 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
         {/* Demo-data banner when API is not reachable */}
         {mode === "mock" && (
-          <div className="mx-3 mb-3 flex items-center gap-2 rounded-md bg-[#2C2561] px-3 py-2 text-[11px] text-[#DFA6CC]">
-            <Radio size={13} />
-            Preview mode — demo data (API offline)
+          <div className="mx-3 mb-3 rounded-md bg-[#2C2561] px-3 py-2 text-[11px] text-[#DFA6CC]">
+            <div className="flex items-center gap-2">
+              <Radio size={13} />
+              Preview mode — demo data (API offline)
+            </div>
+            <div className="mt-1 text-[10px] text-[#9F91C6]">
+              Changes persist in this browser.{" "}
+              <button
+                onClick={() => api.resetDemoData()}
+                className="font-bold text-[#DFA6CC] underline hover:text-white"
+              >
+                Reset demo data
+              </button>
+            </div>
           </div>
         )}
 

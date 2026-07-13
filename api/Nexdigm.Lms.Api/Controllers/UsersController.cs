@@ -5,6 +5,7 @@ using Nexdigm.Lms.Api.Auth;
 using Nexdigm.Lms.Api.Contracts;
 using Nexdigm.Lms.Api.Data;
 using Nexdigm.Lms.Api.Domain;
+using Nexdigm.Lms.Api.Services;
 
 namespace Nexdigm.Lms.Api.Controllers;
 
@@ -14,8 +15,28 @@ namespace Nexdigm.Lms.Api.Controllers;
 public class UsersController : ControllerBase
 {
     private readonly LmsDbContext _db;
+    private readonly PermissionService _permissions;
 
-    public UsersController(LmsDbContext db) => _db = db;
+    public UsersController(LmsDbContext db, PermissionService permissions)
+    {
+        _db = db;
+        _permissions = permissions;
+    }
+
+    /// <summary>Users whose role has the "Own / Handle Leads" permission — valid assignment targets (BRDID04).</summary>
+    [HttpGet("assignable")]
+    public async Task<ActionResult<List<UserDto>>> Assignable(CancellationToken ct)
+    {
+        var roles = await _permissions.RolesWithAsync(PermissionActions.OwnLeads, ct);
+        var users = await _db.Users
+            .Include(u => u.Manager)
+            .Where(u => u.IsActive && roles.Contains(u.Role))
+            .OrderBy(u => u.FullName)
+            .ToListAsync(ct);
+        return users.Select(u => new UserDto(
+            u.Id, u.FullName, u.Email, u.Role.ToString(),
+            u.ManagerId, u.Manager?.FullName, u.IsActive)).ToList();
+    }
 
     /// <summary>All active users — used for owner dropdowns (BRDID04).</summary>
     [HttpGet]
@@ -28,11 +49,11 @@ public class UsersController : ControllerBase
             u.ManagerId, u.Manager?.FullName, u.IsActive)).ToList();
     }
 
-    /// <summary>Add user — Admin only per Role Master.</summary>
+    /// <summary>Add user — "Add User" permission (default: Admin).</summary>
     [HttpPost]
-    [Authorize(Roles = "Admin")]
     public async Task<ActionResult<UserDto>> Create([FromBody] CreateUserRequest req, CancellationToken ct)
     {
+        await _permissions.EnsureAsync(User.GetRole(), PermissionActions.AddUser, ct);
         if (string.IsNullOrWhiteSpace(req.FullName) || string.IsNullOrWhiteSpace(req.Email))
             return BadRequest(new { message = "Full name and email are required." });
         if (string.IsNullOrWhiteSpace(req.Password) || req.Password.Length < 8)
@@ -59,11 +80,11 @@ public class UsersController : ControllerBase
             user.ManagerId, null, user.IsActive);
     }
 
-    /// <summary>Deactivate a user — Admin only.</summary>
+    /// <summary>Deactivate a user — "Add User" (user management) permission.</summary>
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Deactivate(int id, CancellationToken ct)
     {
+        await _permissions.EnsureAsync(User.GetRole(), PermissionActions.AddUser, ct);
         var user = await _db.Users.FindAsync(new object[] { id }, ct);
         if (user is null) return NotFound();
         user.IsActive = false;

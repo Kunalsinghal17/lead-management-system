@@ -18,6 +18,7 @@ interface Props {
 export default function LeadDrawer({ leadId, masters, users, onClose, onChanged }: Props) {
   const { user, can } = useAuth();
   const [lead, setLead] = useState<Lead | null>(null);
+  const [assignable, setAssignable] = useState<UserRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -53,6 +54,8 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
 
   useEffect(() => {
     load().catch(e => setError(e instanceof Error ? e.message : "Failed to load lead."));
+    // Assignment targets = users whose role can own leads (default: Executives)
+    api.assignableUsers().then(setAssignable).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leadId]);
 
@@ -287,10 +290,14 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
               disabled={busy || (lead.assignedToUserId !== null && !elevated) || finalized}
               onChange={e => e.target.value && assign(Number(e.target.value))}
             >
-              <option value="">Unassigned — pick an owner</option>
-              {users.filter(u => u.isActive).map(u => (
+              <option value="">Unassigned — pick an executive</option>
+              {assignable.map(u => (
                 <option key={u.id} value={u.id}>{u.fullName}</option>
               ))}
+              {/* Keep a legacy owner visible even if their role can no longer own leads */}
+              {lead.assignedToUserId !== null && !assignable.some(u => u.id === lead.assignedToUserId) && (
+                <option value={lead.assignedToUserId}>{lead.assignedToName ?? "Current owner"}</option>
+              )}
             </select>
             {lead.assignedToUserId !== null && !elevated && (
               <p className="mt-1 text-[11px] text-[#808081]">Re-assignment is Admin/Manager only (BRDID04).</p>

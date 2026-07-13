@@ -64,11 +64,56 @@ interface MockUser extends UserRow {
 }
 
 const users: MockUser[] = [
-  { id: 1, fullName: "LMS Admin", email: "admin@nexdigm.com", role: "Admin", managerId: null, managerName: null, isActive: true, password: "Admin@123" },
-  { id: 2, fullName: "LMS Manager", email: "manager@nexdigm.com", role: "Manager", managerId: null, managerName: null, isActive: true, password: "Manager@123" },
-  { id: 3, fullName: "LMS Executive", email: "executive@nexdigm.com", role: "Executive", managerId: 2, managerName: "LMS Manager", isActive: true, password: "Exec@123" },
-  { id: 4, fullName: "LMS Basic", email: "basic@nexdigm.com", role: "Basic", managerId: 2, managerName: "LMS Manager", isActive: true, password: "Basic@123" }
+  { id: 1, fullName: "Harshit Mishra", email: "harshit.mishra@nexdigm.com", role: "Admin", managerId: null, managerName: null, isActive: true, password: "Admin@123" },
+  { id: 2, fullName: "Harsh Mittal", email: "harsh.mittal@nexdigm.com", role: "Manager", managerId: null, managerName: null, isActive: true, password: "Manager@123" },
+  { id: 3, fullName: "Aditi Sharma", email: "aditi.sharma@nexdigm.com", role: "Executive", managerId: 2, managerName: "Harsh Mittal", isActive: true, password: "Exec@123" },
+  { id: 4, fullName: "Rohan Kulkarni", email: "rohan.kulkarni@nexdigm.com", role: "Executive", managerId: 2, managerName: "Harsh Mittal", isActive: true, password: "Exec@123" },
+  { id: 5, fullName: "Neha Joshi", email: "neha.joshi@nexdigm.com", role: "Executive", managerId: 2, managerName: "Harsh Mittal", isActive: true, password: "Exec@123" },
+  { id: 6, fullName: "Priyank Desai", email: "priyank.desai@nexdigm.com", role: "Basic", managerId: 2, managerName: "Harsh Mittal", isActive: true, password: "Basic@123" }
 ];
+
+/**
+ * Editable role/permission matrix (BRDID01) — same defaults the API seeds.
+ * Keyed by action → role → allowed.
+ */
+const permissionMatrix: Record<string, Record<string, boolean>> = {
+  ViewAllLeads: { Admin: true, Manager: true, Executive: true, Basic: true },
+  OwnLeads:     { Admin: false, Manager: false, Executive: true, Basic: false },
+  CreateLead:   { Admin: true, Manager: true, Executive: true, Basic: false },
+  Reassign:     { Admin: true, Manager: true, Executive: false, Basic: false },
+  BulkUpload:   { Admin: true, Manager: true, Executive: true, Basic: false },
+  Export:       { Admin: true, Manager: true, Executive: false, Basic: false },
+  DeleteLead:   { Admin: true, Manager: false, Executive: false, Basic: false },
+  AddUser:      { Admin: true, Manager: false, Executive: false, Basic: false }
+};
+
+export function mockIsAllowed(role: Role, action: string): boolean {
+  return permissionMatrix[action]?.[role] ?? false;
+}
+
+export function mockPermissions(): Record<string, Record<string, boolean>> {
+  return JSON.parse(JSON.stringify(permissionMatrix));
+}
+
+export function mockUpdatePermissions(matrix: Record<string, Record<string, boolean>>): Record<string, Record<string, boolean>> {
+  for (const [action, roleMap] of Object.entries(matrix)) {
+    if (!permissionMatrix[action]) continue;
+    for (const [role, allowed] of Object.entries(roleMap)) {
+      if (!(role in permissionMatrix[action])) continue;
+      // lockout guard — Admin can never lose user management
+      permissionMatrix[action][role] =
+        action === "AddUser" && role === "Admin" ? true : allowed;
+    }
+  }
+  persist();
+  return mockPermissions();
+}
+
+export function mockAssignableUsers(): UserRow[] {
+  return users
+    .filter(u => u.isActive && mockIsAllowed(u.role, "OwnLeads"))
+    .map(({ password: _pw, ...u }) => u);
+}
 
 const masters: Masters = {
   lostReasons: ["No Response From Client", "Commercial", "Credentials", "Student", "Free Info", "Duplicate", "Other"],
@@ -77,21 +122,14 @@ const masters: Masters = {
   stages: ["Enquiry", "Lead", "Proposal", "Won", "Lost"],
   statuses: ["Open", "Won", "Lost"],
   enquiryTypes: ["Lead", "NotLead"],
-  roleMatrix: {
-    "View All Leads": { Admin: true, Manager: true, Executive: true, Basic: true },
-    "View Own Leads": { Admin: true, Manager: true, Executive: true, Basic: true },
-    "Export": { Admin: true, Manager: true, Executive: false, Basic: false },
-    "Delete/Inactive": { Admin: true, Manager: false, Executive: false, Basic: false },
-    "Add User": { Admin: true, Manager: false, Executive: false, Basic: false },
-    "Re-assignment of leads": { Admin: true, Manager: true, Executive: false, Basic: false }
-  }
+  roleMatrix: {}
 };
 
 let leads: Lead[] = [];
 let visitors: VisitorStat[] = [];
 let notifications: NotificationRow[] = [];
 let nextLeadId = 56;
-let nextUserId = 5;
+let nextUserId = 7;
 let nextNotificationId = 1;
 
 function buildSeedData() {
@@ -165,8 +203,9 @@ function buildSeedData() {
     };
 
     const bucket = Math.floor(rnd() * 100);
-    const ownerRoll = rnd();
-    const owner = ownerRoll < 0.5 ? users[2] : ownerRoll < 0.8 ? users[3] : users[1];
+    // Owners are always Executives (Own / Handle Leads permission)
+    const executivesPool = [users[2], users[3], users[4]];
+    const owner = executivesPool[Math.floor(rnd() * executivesPool.length)];
 
     if (bucket < 18) {
       // stays in central pool, unclassified
@@ -242,7 +281,59 @@ function buildSeedData() {
   }
 }
 
-buildSeedData();
+// ------------------------------------------------------------------ persistence
+// Demo state survives page refreshes so preview mode behaves like the real
+// system (assignments, updates and uploads stick). Versioned key: bumping it
+// discards stale saved data from older builds.
+const STORAGE_KEY = "lms.mock.v2";
+
+function persist() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      leads, visitors, notifications, users, permissionMatrix,
+      nextLeadId, nextUserId, nextNotificationId
+    }));
+  } catch {
+    // storage full/unavailable — demo continues in memory only
+  }
+}
+
+function hydrate(): boolean {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    const s = JSON.parse(raw);
+    if (!Array.isArray(s.leads) || !Array.isArray(s.users)) return false;
+    leads = s.leads;
+    visitors = s.visitors ?? [];
+    notifications = s.notifications ?? [];
+    users.length = 0;
+    users.push(...s.users);
+    for (const key of Object.keys(permissionMatrix)) {
+      if (s.permissionMatrix?.[key]) permissionMatrix[key] = s.permissionMatrix[key];
+    }
+    nextLeadId = s.nextLeadId ?? leads.length + 1;
+    nextUserId = s.nextUserId ?? users.length + 1;
+    nextNotificationId = s.nextNotificationId ?? notifications.length + 1;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+if (!hydrate()) {
+  buildSeedData();
+  persist();
+}
+
+/** Clears saved demo state; the next page load regenerates the seed dataset. */
+export function mockResetDemo() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
 
 function refreshAges() {
   for (const l of leads) l.ageDays = ageDaysOf(l.createdAtUtc);
@@ -272,6 +363,10 @@ export function mockLogin(email: string, password: string): SessionUser {
 export function mockListLeads(filters: LeadFilters, currentUserId: number, role: Role): Lead[] {
   refreshAges();
   let list = leads.filter(l => l.isActive);
+
+  // Roles without "View All Leads" only ever see their own leads
+  if (!mockIsAllowed(role, "ViewAllLeads"))
+    list = list.filter(l => l.assignedToUserId === currentUserId);
 
   switch (filters.view) {
     case "my":
@@ -357,6 +452,7 @@ export function mockCreateLead(payload: CreateLeadPayload, source: Lead["source"
   };
   nextLeadId++;
   leads.unshift(lead);
+  persist();
   return lead;
 }
 
@@ -367,18 +463,22 @@ export function mockAssign(leadId: number, targetUserId: number, actingUserId: n
   const target = users.find(u => u.id === targetUserId && u.isActive);
   if (!target) throw new MockApiError("Target user not found or inactive.");
 
+  // Only roles with "Own / Handle Leads" can be lead handlers (default: Executives)
+  if (!mockIsAllowed(target.role, "OwnLeads"))
+    throw new MockApiError(
+      `${target.fullName} (${target.role}) cannot own leads. Leads can only be assigned to roles ` +
+      "with the 'Own / Handle Leads' permission (see Users & Roles).");
+
   const isReassignment = lead.assignedToUserId !== null && lead.assignedToUserId !== targetUserId;
-  const elevated = role === "Admin" || role === "Manager";
-  if (isReassignment && !elevated)
-    throw new MockApiError("Only Admin or Manager can re-assign an owned lead.", 403);
-  if (!isReassignment && lead.assignedToUserId === null && targetUserId !== actingUserId && !elevated)
-    throw new MockApiError("You can only pick pool leads for yourself.", 403);
+  if ((isReassignment || targetUserId !== actingUserId) && !mockIsAllowed(role, "Reassign"))
+    throw new MockApiError("Your role does not have the 'Re-assignment of leads' permission.", 403);
 
   lead.assignedToUserId = target.id;
   lead.assignedToName = target.fullName;
   lead.assignedAtUtc = lead.assignedAtUtc ?? new Date().toISOString();
   if (isReassignment) lead.assignedAtUtc = new Date().toISOString();
   lead.lastUpdateAtUtc = new Date().toISOString();
+  persist();
   return lead;
 }
 
@@ -464,6 +564,7 @@ export function mockUpdateLead(leadId: number, req: UpdateLeadPayload, actingUse
   }
 
   lead.lastUpdateAtUtc = new Date().toISOString();
+  persist();
   return lead;
 }
 
@@ -498,13 +599,16 @@ export function mockDayUpdate(leadId: number, dayNumber: number, note: string, a
   else lead.dayUpdates.push(entry);
 
   lead.lastUpdateAtUtc = new Date().toISOString();
+  persist();
   return lead;
 }
 
 export function mockDeleteLead(leadId: number, role: Role): void {
-  if (role !== "Admin") throw new MockApiError("Only Admin can delete/inactivate leads.", 403);
+  if (!mockIsAllowed(role, "DeleteLead"))
+    throw new MockApiError("Your role does not have the 'Delete/Inactive' permission.", 403);
   const lead = mockGetLead(leadId);
   lead.isActive = false;
+  persist();
 }
 
 export function mockSimulateIngestion(): Lead {
@@ -528,6 +632,7 @@ export function mockSimulateIngestion(): Lead {
     cta: ctas[Math.floor(rnd() * ctas.length)]
   }, "Website");
   lead.ipAddress = `${Math.floor(rnd() * 190 + 30)}.${Math.floor(rnd() * 255)}.${Math.floor(rnd() * 255)}.${Math.floor(rnd() * 253 + 1)}`;
+  persist();
   return lead;
 }
 
@@ -549,7 +654,7 @@ export function mockDashboard(days = 30): DashboardSummary {
     trend.push({ date: key, count: active.filter(l => l.createdAtUtc.slice(0, 10) === key).length });
   }
 
-  const group = (arr: Lead[], key: (l: Lead) => string | null | undefined) => {
+  const group = (arr: Lead[], key: (l: Lead) => string | null) => {
     const map = new Map<string, number>();
     for (const l of arr) {
       const k = key(l);
@@ -603,12 +708,13 @@ export function mockCreateUser(fullName: string, email: string, password: string
     password
   };
   users.push(user);
+  persist();
   const { password: _pw, ...row } = user;
   return row;
 }
 
 export function mockMasters(): Masters {
-  return masters;
+  return { ...masters, roleMatrix: mockPermissions() };
 }
 
 export function mockVisitors(): VisitorStat[] {
@@ -659,6 +765,7 @@ export function mockRunNotificationSweep(): { message: string } {
       lead.escalationFlag = true;
     }
   }
+  persist();
   return { message: `Notification sweep executed — ${count} notifications generated. Check the log below.` };
 }
 
@@ -671,7 +778,7 @@ export const TEMPLATE_COLUMNS = [
 
 export function mockTemplateCsv(): string {
   return TEMPLATE_COLUMNS.join(",") + "\n" +
-    'RC-EXM-0001,Sample Contact,sample.contact@company.com,+91,9800000000,Healthcare,Enquiry,Open,executive@nexdigm.com,250000,Migrated from legacy tracker\n';
+    'RC-EXM-0001,Sample Contact,sample.contact@company.com,+91,9800000000,Healthcare,Enquiry,Open,aditi.sharma@nexdigm.com,250000,Migrated from legacy tracker\n';
 }
 
 export function mockBulkUpload(text: string): BulkUploadResult {
@@ -721,8 +828,9 @@ export function mockBulkUpload(text: string): BulkUploadResult {
     }
     let owner: MockUser | undefined;
     if (handledBy) {
-      owner = users.find(u => u.email.toLowerCase() === handledBy.toLowerCase() && u.isActive);
-      if (!owner) { errors.push({ row: rowNo, error: `'Enquiry Handled By' user '${handledBy}' not found in LMS.` }); continue; }
+      owner = users.find(u =>
+        u.email.toLowerCase() === handledBy.toLowerCase() && u.isActive && mockIsAllowed(u.role, "OwnLeads"));
+      if (!owner) { errors.push({ row: rowNo, error: `'Enquiry Handled By' user '${handledBy}' not found or not allowed to own leads.` }); continue; }
     }
 
     const lead = mockCreateLead({
@@ -750,6 +858,7 @@ export function mockBulkUpload(text: string): BulkUploadResult {
     inserted++;
   }
 
+  persist();
   return { totalRows: total, inserted, failed: errors.length, errors };
 }
 

@@ -7,17 +7,23 @@ namespace Nexdigm.Lms.Api.Controllers;
 
 [ApiController]
 [Route("api/bulk-upload")]
-[Authorize(Roles = "Admin,Manager,Executive")]
+[Authorize]
 public class BulkUploadController : ControllerBase
 {
     private readonly ExcelService _excel;
+    private readonly PermissionService _permissions;
 
-    public BulkUploadController(ExcelService excel) => _excel = excel;
+    public BulkUploadController(ExcelService excel, PermissionService permissions)
+    {
+        _excel = excel;
+        _permissions = permissions;
+    }
 
     /// <summary>BRDID12 — downloadable standard Excel template.</summary>
     [HttpGet("template")]
-    public IActionResult Template()
+    public async Task<IActionResult> Template(CancellationToken ct)
     {
+        await _permissions.EnsureAsync(User.GetRole(), PermissionActions.BulkUpload, ct);
         var bytes = _excel.BuildTemplate();
         return File(bytes,
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -29,6 +35,7 @@ public class BulkUploadController : ControllerBase
     [RequestSizeLimit(10 * 1024 * 1024)]
     public async Task<ActionResult<BulkUploadResult>> Upload(IFormFile file, CancellationToken ct)
     {
+        await _permissions.EnsureAsync(User.GetRole(), PermissionActions.BulkUpload, ct);
         if (file is null || file.Length == 0)
             return BadRequest(new { message = "Please choose an .xlsx file to upload." });
         if (!file.FileName.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase))

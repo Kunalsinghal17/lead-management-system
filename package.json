@@ -7,7 +7,6 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"
   },
@@ -15,7 +14,7 @@
     "lucide-react": "^0.451.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^7.18.1",
+    "react-router-dom": "^6.26.2",
     "recharts": "^2.12.7"
   },
   "devDependencies": {

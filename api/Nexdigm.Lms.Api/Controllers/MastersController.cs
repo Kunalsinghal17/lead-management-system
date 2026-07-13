@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Nexdigm.Lms.Api.Contracts;
 using Nexdigm.Lms.Api.Data;
+using Nexdigm.Lms.Api.Services;
 
 namespace Nexdigm.Lms.Api.Controllers;
 
@@ -12,25 +13,21 @@ namespace Nexdigm.Lms.Api.Controllers;
 public class MastersController : ControllerBase
 {
     private readonly LmsDbContext _db;
+    private readonly PermissionService _permissions;
 
-    public MastersController(LmsDbContext db) => _db = db;
+    public MastersController(LmsDbContext db, PermissionService permissions)
+    {
+        _db = db;
+        _permissions = permissions;
+    }
 
-    /// <summary>All dropdown masters and the role/permission matrix (BRDID01, Master File).</summary>
+    /// <summary>All dropdown masters and the live (editable) role/permission matrix.</summary>
     [HttpGet]
     public async Task<ActionResult<MastersDto>> Get(CancellationToken ct)
     {
         var lostReasons = await Values("LostReason", ct);
         var industries = await Values("Industry", ct);
-
-        var roleMatrix = new Dictionary<string, Dictionary<string, bool>>
-        {
-            ["View All Leads"]        = new() { ["Admin"] = true,  ["Manager"] = true,  ["Executive"] = true,  ["Basic"] = true },
-            ["View Own Leads"]        = new() { ["Admin"] = true,  ["Manager"] = true,  ["Executive"] = true,  ["Basic"] = true },
-            ["Export"]                = new() { ["Admin"] = true,  ["Manager"] = true,  ["Executive"] = false, ["Basic"] = false },
-            ["Delete/Inactive"]       = new() { ["Admin"] = true,  ["Manager"] = false, ["Executive"] = false, ["Basic"] = false },
-            ["Add User"]              = new() { ["Admin"] = true,  ["Manager"] = false, ["Executive"] = false, ["Basic"] = false },
-            ["Re-assignment of leads"] = new() { ["Admin"] = true, ["Manager"] = true,  ["Executive"] = false, ["Basic"] = false }
-        };
+        var roleMatrix = await _permissions.GetMatrixAsync(ct);
 
         return new MastersDto(
             lostReasons,

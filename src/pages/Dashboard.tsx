@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip,
   PieChart, Pie, Cell, BarChart, Bar
 } from "recharts";
-import { RefreshCcw, Zap } from "lucide-react";
+import { RefreshCcw, TrendingDown, Zap } from "lucide-react";
 import { api } from "../lib/api";
 import { DashboardSummary, Lead } from "../lib/types";
 import { formatInr, ageLabel } from "../lib/format";
@@ -15,14 +15,14 @@ const SERIES = ["#645BA8", "#C86AA9", "#26AD8B", "#F0AA31", "#467082", "#2D7D3E"
 export default function Dashboard() {
   const { user, can } = useAuth();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
-  const [recent, setRecent] = useState<Lead[]>([]);
+  const [leads, setLeads] = useState<Lead[]>([]);
   const [days, setDays] = useState(30);
   const [toast, setToast] = useState<string | null>(null);
 
   const load = async (d = days) => {
-    const [s, leads] = await Promise.all([api.dashboard(d), api.listLeads({})]);
+    const [s, all] = await Promise.all([api.dashboard(d), api.listLeads({})]);
     setSummary(s);
-    setRecent(leads.slice(0, 8));
+    setLeads(all);
   };
 
   useEffect(() => {
@@ -37,15 +37,80 @@ export default function Dashboard() {
     window.setTimeout(() => setToast(null), 4000);
   };
 
+  // ---------------- derived analytics ----------------
+
+  const stageCount = (name: string) =>
+    summary?.byStage.find(s => s.name === name)?.value ?? 0;
+
+  const funnel = useMemo(() => {
+    if (!summary) return [];
+    const total = summary.totalLeads;
+    const reachedLead = total - stageCount("Enquiry");
+    const reachedProposal = stageCount("Proposal") + stageCount("Won") + stageCount("Lost");
+    const won = summary.wonLeads;
+
+    const steps = [
+      { label: "Enquiries received", count: total, hint: "Website + manual + bulk (BRDID02/03/12)" },
+      { label: "Qualified as Lead", count: reachedLead, hint: "Classified Lead, moved past Enquiry" },
+      { label: "Proposal shared", count: reachedProposal, hint: "Commercial discussion underway" },
+      { label: "Won", count: won, hint: `${formatInr(summary.wonValueInr)} converted` }
+    ];
+    return steps.map((s, i) => ({
+      ...s,
+      pctOfTotal: total === 0 ? 0 : Math.round((100 * s.count) / total),
+      stepConv: i === 0 || steps[i - 1].count === 0
+        ? null
+        : Math.round((100 * s.count) / steps[i - 1].count),
+      dropped: i === 0 ? 0 : steps[i - 1].count - s.count
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [summary]);
+
+  const aging = useMemo(() => {
+    const open = leads.filter(l => l.status === "Open" && l.enquiryType !== "NotLead");
+    const buckets = [
+      { name: "0–2d", test: (d: number) => d <= 2, color: "#2D7D3E" },
+      { name: "3–5d", test: (d: number) => d >= 3 && d <= 5, color: "#26AD8B" },
+      { name: "6–10d", test: (d: number) => d >= 6 && d <= 10, color: "#F0AA31" },
+      { name: ">10d", test: (d: number) => d > 10, color: "#712B69" }
+    ];
+    return buckets.map(b => ({
+      name: b.name,
+      color: b.color,
+      value: open.filter(l => b.test(l.ageDays)).length
+    }));
+  }, [leads]);
+
+  const leaderboard = useMemo(() => {
+    const map = new Map<string, { open: number; won: number; lost: number; wonValue: number }>();
+    for (const l of leads.filter(x => x.enquiryType !== "NotLead" && x.assignedToName)) {
+      const row = map.get(l.assignedToName!) ?? { open: 0, won: 0, lost: 0, wonValue: 0 };
+      if (l.status === "Open") row.open++;
+      if (l.status === "Won") { row.won++; row.wonValue += l.valueInr ?? 0; }
+      if (l.status === "Lost") row.lost++;
+      map.set(l.assignedToName!, row);
+    }
+    return [...map.entries()]
+      .map(([name, r]) => ({
+        name,
+        ...r,
+        conversion: r.won + r.lost === 0 ? null : Math.round((100 * r.won) / (r.won + r.lost))
+      }))
+      .sort((a, b) => b.wonValue - a.wonValue);
+  }, [leads]);
+
+  const recent = leads.slice(0, 8);
+
   if (!summary) {
     return <div className="py-24 text-center text-sm text-[#808081]">Loading dashboard…</div>;
   }
 
   const kpis = [
     { label: "Total Leads", value: String(summary.totalLeads), sub: `${summary.closedNotLeads} not-lead auto-closed` },
-    { label: "Open Leads", value: String(summary.openLeads), sub: `${summary.unassignedLeads} in central pool` },
-    { label: "Conversion Rate", value: `${summary.conversionRatePct}%`, sub: `${formatInr(summary.wonValueInr)} converted` },
-    { label: "Pipeline Value", value: formatInr(summary.pipelineValueInr), sub: `${formatInr(summary.lostValueInr)} lost` }
+    { label: "Open Leads", value: String(summary.openLeads), sub: `${summary.unassignedLeads} awaiting owner` },
+    { label: "Conversion Rate", value: `${summary.conversionRatePct}%`, sub: `${summary.wonLeads} won · ${summary.lostLeads} lost` },
+    { label: "Pipeline Value", value: formatInr(summary.pipelineValueInr), sub: "open opportunities" },
+    { label: "Won Value", value: formatInr(summary.wonValueInr), sub: `${formatInr(summary.lostValueInr)} lost` }
   ];
 
   return (
@@ -83,7 +148,7 @@ export default function Dashboard() {
       )}
 
       {/* KPI row */}
-      <div className="mb-6 grid grid-cols-2 gap-4 xl:grid-cols-4">
+      <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
         {kpis.map(k => (
           <div key={k.label} className="rounded-lg border border-[#DFDDDD] p-4">
             <div className="text-xs font-bold uppercase tracking-wide text-[#808081]">{k.label}</div>
@@ -91,6 +156,61 @@ export default function Dashboard() {
             <div className="mt-1 text-xs text-[#808081]">{k.sub}</div>
           </div>
         ))}
+      </div>
+
+      {/* Conversion funnel (BRDID07 lifecycle) */}
+      <div className="mb-6 rounded-lg border border-[#DFDDDD] p-5">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <div className="text-sm font-bold text-[#333333]">Conversion funnel</div>
+            <div className="text-xs text-[#808081]">
+              How enquiries progress through Enquiry → Lead → Proposal → Won, with step-by-step conversion.
+            </div>
+          </div>
+          <span className="rounded-full px-2.5 py-1 text-xs font-bold" style={{ backgroundColor: "#C6BDDD", color: "#2C2561" }}>
+            End-to-end: {funnel.length > 0 && funnel[0].count > 0
+              ? Math.round((100 * funnel[funnel.length - 1].count) / funnel[0].count)
+              : 0}%
+          </span>
+        </div>
+
+        <div className="space-y-1.5">
+          {funnel.map((step, i) => {
+            const width = Math.max(9, step.pctOfTotal);
+            const colors = ["#645BA8", "#776DA7", "#9F91C6", "#2D7D3E"];
+            return (
+              <div key={step.label}>
+                {i > 0 && step.dropped > 0 && (
+                  <div className="mb-1 flex items-center gap-1.5 pl-1 text-[11px] text-[#808081]">
+                    <TrendingDown size={11} className="text-[#712B69]" />
+                    {step.dropped} dropped ({step.stepConv !== null ? 100 - step.stepConv : 0}%)
+                    {i === funnel.length - 1 && summary.lostLeads > 0 && ` — includes ${summary.lostLeads} marked Lost`}
+                  </div>
+                )}
+                <div className="flex items-center gap-3">
+                  <div className="flex-1">
+                    <div
+                      className="flex h-12 items-center justify-between rounded-md px-4 text-white transition-all"
+                      style={{ width: `${width}%`, minWidth: 220, backgroundColor: colors[i] }}
+                    >
+                      <div>
+                        <div className="text-xs font-bold leading-tight">{step.label}</div>
+                        <div className="text-[10px] leading-tight opacity-80">{step.hint}</div>
+                      </div>
+                      <div className="pl-4 text-right">
+                        <div className="text-base font-bold leading-tight">{step.count}</div>
+                        <div className="text-[10px] leading-tight opacity-80">{step.pctOfTotal}% of total</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="w-24 shrink-0 text-right text-xs font-bold" style={{ color: "#645BA8" }}>
+                    {step.stepConv !== null ? `${step.stepConv}% convert` : ""}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* Trend + source mix */}
@@ -176,29 +296,19 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Stage + industry */}
-      <div className="mb-6 grid gap-4 lg:grid-cols-2">
+      {/* Aging + industries + leaderboard */}
+      <div className="mb-6 grid gap-4 lg:grid-cols-3">
         <div className="rounded-lg border border-[#DFDDDD] p-4">
-          <div className="mb-2 text-sm font-bold text-[#333333]">Pipeline by stage</div>
+          <div className="text-sm font-bold text-[#333333]">Open-lead aging</div>
+          <div className="mb-2 text-xs text-[#808081]">Reminders at 5d · escalation at 10d (BRDID10)</div>
           <div className="h-44">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={summary.byStage} margin={{ top: 4, right: 4, bottom: 0, left: -24 }}>
-                <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#808081" }} />
+              <BarChart data={aging} margin={{ top: 4, right: 4, bottom: 0, left: -28 }}>
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#808081" }} interval={0} />
                 <YAxis tick={{ fontSize: 10, fill: "#808081" }} allowDecimals={false} />
                 <Tooltip contentStyle={{ fontSize: 12, borderColor: "#DFDDDD" }} />
-                <Bar dataKey="value" radius={[4, 4, 0, 0]} name="Leads">
-                  {summary.byStage.map((entry, i) => (
-                    <Cell
-                      key={i}
-                      fill={
-                        entry.name === "Won" ? "#2D7D3E"
-                          : entry.name === "Lost" ? "#712B69"
-                          : entry.name === "Proposal" ? "#C86AA9"
-                          : entry.name === "Lead" ? "#645BA8"
-                          : "#467082"
-                      }
-                    />
-                  ))}
+                <Bar dataKey="value" radius={[4, 4, 0, 0]} name="Open leads">
+                  {aging.map((b, i) => <Cell key={i} fill={b.color} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -207,16 +317,57 @@ export default function Dashboard() {
 
         <div className="rounded-lg border border-[#DFDDDD] p-4">
           <div className="mb-2 text-sm font-bold text-[#333333]">Top industries</div>
-          <div className="h-44">
+          <div className="h-48">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={summary.byIndustry} layout="vertical" margin={{ top: 0, right: 8, bottom: 0, left: 30 }}>
+              <BarChart
+                data={summary.byIndustry.slice(0, 6)}
+                layout="vertical"
+                margin={{ top: 0, right: 8, bottom: 0, left: 0 }}
+              >
                 <XAxis type="number" tick={{ fontSize: 10, fill: "#808081" }} allowDecimals={false} />
-                <YAxis type="category" dataKey="name" width={90} tick={{ fontSize: 11, fill: "#333333" }} />
+                <YAxis
+                  type="category"
+                  dataKey="name"
+                  width={104}
+                  interval={0}
+                  tick={{ fontSize: 11, fill: "#333333" }}
+                />
                 <Tooltip contentStyle={{ fontSize: 12, borderColor: "#DFDDDD" }} />
                 <Bar dataKey="value" fill="#9F91C6" radius={[0, 4, 4, 0]} name="Leads" />
               </BarChart>
             </ResponsiveContainer>
           </div>
+        </div>
+
+        <div className="rounded-lg border border-[#DFDDDD] p-4">
+          <div className="text-sm font-bold text-[#333333]">Team leaderboard</div>
+          <div className="mb-2 text-xs text-[#808081]">Executives by won value</div>
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="uppercase tracking-wide text-[#808081]">
+                <th className="py-1.5 font-bold">Executive</th>
+                <th className="py-1.5 text-center font-bold">Open</th>
+                <th className="py-1.5 text-center font-bold">Won</th>
+                <th className="py-1.5 text-center font-bold">Conv.</th>
+                <th className="py-1.5 text-right font-bold">Won value</th>
+              </tr>
+            </thead>
+            <tbody>
+              {leaderboard.length === 0 ? (
+                <tr><td colSpan={5} className="py-6 text-center text-[#808081]">No assigned leads yet.</td></tr>
+              ) : (
+                leaderboard.map(r => (
+                  <tr key={r.name} className="border-t border-[#DFDDDD]">
+                    <td className="py-2 font-bold text-[#333333]">{r.name}</td>
+                    <td className="py-2 text-center text-[#333333]">{r.open}</td>
+                    <td className="py-2 text-center font-bold text-[#2D7D3E]">{r.won}</td>
+                    <td className="py-2 text-center text-[#333333]">{r.conversion === null ? "—" : `${r.conversion}%`}</td>
+                    <td className="py-2 text-right text-[#333333]">{formatInr(r.wonValue)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 

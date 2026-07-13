@@ -187,3 +187,18 @@ export const NEXT_STAGES: Record<Stage, Stage[]> = {
 };
 
 export const isFinalStatus = (s: Status) => s === "Won" || s === "Lost" || s === "Closed";
+
+/** Permission matrix shape shared with the API. */
+export type PermissionMatrix = Record<string, Record<string, boolean>>;
+
+/** Display names for the editable permission actions (BRDID01 Role Master). */
+export const PERMISSION_LABELS: Record<string, string> = {
+  ViewAllLeads: "View All Leads",
+  OwnLeads: "Own / Handle Leads",
+  CreateLead: "Create Lead (Manual)",
+  Reassign: "Re-assignment of leads",
+  BulkUpload: "Bulk Upload",
+  Export: "Export",
+  DeleteLead: "Delete/Inactive",
+  AddUser: "Add User"
+};

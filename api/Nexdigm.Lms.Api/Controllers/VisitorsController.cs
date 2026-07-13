@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Nexdigm.Lms.Api.Contracts;
 using Nexdigm.Lms.Api.Data;
+using Nexdigm.Lms.Api.Services;
 
 namespace Nexdigm.Lms.Api.Controllers;
 
@@ -13,11 +14,13 @@ public class VisitorsController : ControllerBase
 {
     private readonly LmsDbContext _db;
     private readonly IConfiguration _config;
+    private readonly PermissionService _permissions;
 
-    public VisitorsController(LmsDbContext db, IConfiguration config)
+    public VisitorsController(LmsDbContext db, IConfiguration config, PermissionService permissions)
     {
         _db = db;
         _config = config;
+        _permissions = permissions;
     }
 
     /// <summary>BRDID13 — visitor timestamping and visit counts.</summary>
@@ -33,11 +36,12 @@ public class VisitorsController : ControllerBase
             v.Id, v.IpAddress, v.TimeSpentSeconds, v.VisitCount, v.FirstVisitAtUtc, v.LastVisitAtUtc)).ToList();
     }
 
-    /// <summary>Export visitor data — Admin/Manager (Export permission).</summary>
+    /// <summary>Export visitor data — "Export" permission.</summary>
     [HttpGet("export")]
-    [Authorize(Roles = "Admin,Manager")]
+    [Authorize]
     public async Task<IActionResult> Export(CancellationToken ct)
     {
+        await _permissions.EnsureAsync(User.GetRole(), PermissionActions.Export, ct);
         var stats = await _db.VisitorStats.OrderByDescending(v => v.LastVisitAtUtc).ToListAsync(ct);
         var sb = new StringBuilder();
         sb.AppendLine("IP Address,Time Spent (seconds),No. of Visits,First Visit (UTC),Last Visit (UTC)");

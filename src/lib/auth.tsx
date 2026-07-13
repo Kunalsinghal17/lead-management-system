@@ -1,18 +1,20 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { SessionUser } from "./types";
+import { PermissionMatrix, SessionUser } from "./types";
 import { api } from "./api";
 
 /**
  * Session management (BRDID01 + security controls):
  *  - JWT kept in sessionStorage (cleared when browser closes; not a cookie)
  *  - automatic logout after a period of inactivity (session timeout)
- *  - role available app-wide for page/field/action-level access control
+ *  - live, editable permission matrix drives page/field/action-level access.
+ *    The API re-validates every request, so the UI can never over-grant.
  */
 interface AuthContextValue {
   user: SessionUser | null;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   can: (action: PermissionAction) => boolean;
+  refreshPermissions: () => Promise<void>;
 }
 
 export type PermissionAction =
@@ -21,15 +23,29 @@ export type PermissionAction =
   | "addUser"
   | "reassign"
   | "createLead"
-  | "bulkUpload";
+  | "bulkUpload"
+  | "ownLeads";
 
-const PERMISSIONS: Record<PermissionAction, string[]> = {
+/** UI action → matrix action key (as stored in the DB / mock). */
+const ACTION_KEYS: Record<PermissionAction, string> = {
+  export: "Export",
+  delete: "DeleteLead",
+  addUser: "AddUser",
+  reassign: "Reassign",
+  createLead: "CreateLead",
+  bulkUpload: "BulkUpload",
+  ownLeads: "OwnLeads"
+};
+
+/** Fallbacks while the matrix loads (BRD Role Master defaults). */
+const DEFAULTS: Record<PermissionAction, string[]> = {
   export: ["Admin", "Manager"],
   delete: ["Admin"],
   addUser: ["Admin"],
   reassign: ["Admin", "Manager"],
   createLead: ["Admin", "Manager", "Executive"],
-  bulkUpload: ["Admin", "Manager", "Executive"]
+  bulkUpload: ["Admin", "Manager", "Executive"],
+  ownLeads: ["Executive"]
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -47,9 +63,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   });
 
+  const [matrix, setMatrix] = useState<PermissionMatrix | null>(null);
+
   const logout = useCallback(() => {
     sessionStorage.removeItem("lms.session");
     setUser(null);
+    setMatrix(null);
+  }, []);
+
+  const refreshPermissions = useCallback(async () => {
+    try {
+      setMatrix(await api.permissions());
+    } catch {
+      // keep defaults on failure
+    }
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
@@ -57,6 +84,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     sessionStorage.setItem("lms.session", JSON.stringify(session));
     setUser(session);
   }, []);
+
+  // Load the live permission matrix once signed in
+  useEffect(() => {
+    if (user) refreshPermissions();
+  }, [user, refreshPermissions]);
 
   // Idle timeout — re-login required after inactivity
   useEffect(() => {
@@ -76,11 +108,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user, logout]);
 
   const can = useCallback(
-    (action: PermissionAction) => !!user && PERMISSIONS[action].includes(user.role),
-    [user]
+    (action: PermissionAction) => {
+      if (!user) return false;
+      const key = ACTION_KEYS[action];
+      if (matrix && matrix[key]) return !!matrix[key][user.role];
+      return DEFAULTS[action].includes(user.role);
+    },
+    [user, matrix]
   );
 
-  const value = useMemo(() => ({ user, login, logout, can }), [user, login, logout, can]);
+  const value = useMemo(
+    () => ({ user, login, logout, can, refreshPermissions }),
+    [user, login, logout, can, refreshPermissions]
+  );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

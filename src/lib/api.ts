@@ -9,8 +9,8 @@
 import * as mock from "./mock";
 import {
   BulkUploadResult, CreateLeadPayload, DashboardSummary, Lead, LeadFilters,
-  Masters, NotificationRow, Role, SessionUser, UpdateLeadPayload, UserRow,
-  VisitorStat
+  Masters, NotificationRow, PermissionMatrix, Role, SessionUser,
+  UpdateLeadPayload, UserRow, VisitorStat
 } from "./types";
 
 const BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "";
@@ -100,6 +100,15 @@ function me(): { id: number; role: Role } {
   return { id: s?.userId ?? 0, role: s?.role ?? "Basic" };
 }
 
+/**
+ * Fired after every successful mutation so live UI elements (e.g. the Central
+ * Pool badge in the sidebar) refresh immediately instead of waiting for a poll.
+ */
+export const DATA_CHANGED_EVENT = "lms:data-changed";
+function notifyDataChanged() {
+  window.dispatchEvent(new CustomEvent(DATA_CHANGED_EVENT));
+}
+
 function downloadBlob(content: string | Blob, filename: string, type = "text/csv") {
   const blob = content instanceof Blob ? content : new Blob([content], { type });
   const url = URL.createObjectURL(blob);
@@ -143,43 +152,60 @@ export const api = {
   },
 
   async createLead(payload: CreateLeadPayload): Promise<Lead> {
-    if ((await apiMode()) === "mock") return wrapMock(() => mock.mockCreateLead(payload));
-    return http<Lead>("/api/leads", { method: "POST", body: JSON.stringify(payload) });
+    const lead = (await apiMode()) === "mock"
+      ? wrapMock(() => mock.mockCreateLead(payload))
+      : await http<Lead>("/api/leads", { method: "POST", body: JSON.stringify(payload) });
+    notifyDataChanged();
+    return lead;
   },
 
   async updateLead(id: number, payload: UpdateLeadPayload): Promise<Lead> {
+    let lead: Lead;
     if ((await apiMode()) === "mock") {
       const u = me();
-      return wrapMock(() => mock.mockUpdateLead(id, payload, u.id, u.role));
+      lead = wrapMock(() => mock.mockUpdateLead(id, payload, u.id, u.role));
+    } else {
+      lead = await http<Lead>(`/api/leads/${id}`, { method: "PUT", body: JSON.stringify(payload) });
     }
-    return http<Lead>(`/api/leads/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+    notifyDataChanged();
+    return lead;
   },
 
   async assignLead(id: number, userId: number): Promise<Lead> {
+    let lead: Lead;
     if ((await apiMode()) === "mock") {
       const u = me();
-      return wrapMock(() => mock.mockAssign(id, userId, u.id, u.role));
+      lead = wrapMock(() => mock.mockAssign(id, userId, u.id, u.role));
+    } else {
+      lead = await http<Lead>(`/api/leads/${id}/assign`, { method: "POST", body: JSON.stringify({ userId }) });
     }
-    return http<Lead>(`/api/leads/${id}/assign`, { method: "POST", body: JSON.stringify({ userId }) });
+    notifyDataChanged();
+    return lead;
   },
 
   async addDayUpdate(id: number, dayNumber: number, note: string): Promise<Lead> {
+    let lead: Lead;
     if ((await apiMode()) === "mock") {
       const u = me();
-      return wrapMock(() => mock.mockDayUpdate(id, dayNumber, note, u.id, u.role));
+      lead = wrapMock(() => mock.mockDayUpdate(id, dayNumber, note, u.id, u.role));
+    } else {
+      lead = await http<Lead>(`/api/leads/${id}/day-updates`, {
+        method: "POST",
+        body: JSON.stringify({ dayNumber, note })
+      });
     }
-    return http<Lead>(`/api/leads/${id}/day-updates`, {
-      method: "POST",
-      body: JSON.stringify({ dayNumber, note })
-    });
+    notifyDataChanged();
+    return lead;
   },
 
   async deleteLead(id: number): Promise<void> {
     if ((await apiMode()) === "mock") {
       const u = me();
-      return wrapMock(() => mock.mockDeleteLead(id, u.role));
+      wrapMock(() => mock.mockDeleteLead(id, u.role));
+    } else {
+      await http<void>(`/api/leads/${id}`, { method: "DELETE" });
     }
-    return http<void>(`/api/leads/${id}`, { method: "DELETE" });
+    notifyDataChanged();
   },
 
   async exportLeads(view = "all"): Promise<void> {
@@ -209,13 +235,42 @@ export const api = {
     return http<UserRow[]>("/api/users");
   },
 
+  /** Users whose role can own/handle leads — valid assignment targets (BRDID04). */
+  async assignableUsers(): Promise<UserRow[]> {
+    if ((await apiMode()) === "mock") return wrapMock(() => mock.mockAssignableUsers());
+    return http<UserRow[]>("/api/users/assignable");
+  },
+
+  async permissions(): Promise<PermissionMatrix> {
+    if ((await apiMode()) === "mock") return wrapMock(() => mock.mockPermissions());
+    return http<PermissionMatrix>("/api/permissions");
+  },
+
+  async updatePermissions(matrix: PermissionMatrix): Promise<PermissionMatrix> {
+    const updated = (await apiMode()) === "mock"
+      ? wrapMock(() => mock.mockUpdatePermissions(matrix))
+      : await http<PermissionMatrix>("/api/permissions", { method: "PUT", body: JSON.stringify(matrix) });
+    notifyDataChanged();
+    return updated;
+  },
+
   async createUser(fullName: string, email: string, password: string, role: Role, managerId?: number | null): Promise<UserRow> {
-    if ((await apiMode()) === "mock")
-      return wrapMock(() => mock.mockCreateUser(fullName, email, password, role, managerId));
-    return http<UserRow>("/api/users", {
-      method: "POST",
-      body: JSON.stringify({ fullName, email, password, role, managerId })
-    });
+    const user = (await apiMode()) === "mock"
+      ? wrapMock(() => mock.mockCreateUser(fullName, email, password, role, managerId))
+      : await http<UserRow>("/api/users", {
+          method: "POST",
+          body: JSON.stringify({ fullName, email, password, role, managerId })
+        });
+    notifyDataChanged();
+    return user;
+  },
+
+  /** Preview mode only — clears saved demo data and reloads with a fresh seed. */
+  async resetDemoData(): Promise<void> {
+    if ((await apiMode()) === "mock") {
+      mock.mockResetDemo();
+      window.location.reload();
+    }
   },
 
   async visitors(): Promise<VisitorStat[]> {
@@ -244,11 +299,15 @@ export const api = {
   },
 
   async simulateIngestion(): Promise<{ message: string }> {
+    let result: { message: string };
     if ((await apiMode()) === "mock") {
       const lead = wrapMock(() => mock.mockSimulateIngestion());
-      return { message: `Simulated website enquiry ingested (${lead.leadCode}).` };
+      result = { message: `Simulated website enquiry ingested (${lead.leadCode}).` };
+    } else {
+      result = await http<{ message: string }>("/api/ingest/simulate", { method: "POST" });
     }
-    return http<{ message: string }>("/api/ingest/simulate", { method: "POST" });
+    notifyDataChanged();
+    return result;
   },
 
   async downloadTemplate(): Promise<void> {
@@ -267,7 +326,9 @@ export const api = {
       if (!file.name.toLowerCase().endsWith(".csv"))
         throw new ApiError("Preview mode accepts the .csv template (the live system accepts .xlsx).", 400);
       const text = await file.text();
-      return wrapMock(() => mock.mockBulkUpload(text));
+      const res = wrapMock(() => mock.mockBulkUpload(text));
+      notifyDataChanged();
+      return res;
     }
     const form = new FormData();
     form.append("file", file);
@@ -278,6 +339,7 @@ export const api = {
     });
     const body = await res.json();
     if (!res.ok) throw new ApiError(body?.message ?? "Upload failed.", res.status);
+    notifyDataChanged();
     return body as BulkUploadResult;
   }
 };

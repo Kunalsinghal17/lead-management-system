@@ -16,11 +16,13 @@ public class LeadsController : ControllerBase
 {
     private readonly LmsDbContext _db;
     private readonly LeadService _leads;
+    private readonly PermissionService _permissions;
 
-    public LeadsController(LmsDbContext db, LeadService leads)
+    public LeadsController(LmsDbContext db, LeadService leads, PermissionService permissions)
     {
         _db = db;
         _leads = leads;
+        _permissions = permissions;
     }
 
     /// <summary>
@@ -43,6 +45,10 @@ public class LeadsController : ControllerBase
             .Include(l => l.AssignedTo)
             .Include(l => l.DayUpdates)
             .Where(l => l.IsActive);
+
+        // Roles without "View All Leads" only ever see their own leads.
+        if (!await _permissions.IsAllowedAsync(User.GetRole(), PermissionActions.ViewAllLeads, ct))
+            q = q.Where(l => l.AssignedToUserId == userId);
 
         switch (view.ToLowerInvariant())
         {
@@ -97,11 +103,11 @@ public class LeadsController : ControllerBase
         return LeadService.ToDto(lead, names);
     }
 
-    /// <summary>BRDID03 — manual lead creation (roles per Role Master; Basic cannot create).</summary>
+    /// <summary>BRDID03 — manual lead creation (permission-controlled via Role Master).</summary>
     [HttpPost]
-    [Authorize(Roles = "Admin,Manager,Executive")]
     public async Task<ActionResult<LeadDto>> Create([FromBody] CreateLeadRequest req, CancellationToken ct)
     {
+        await _permissions.EnsureAsync(User.GetRole(), PermissionActions.CreateLead, ct);
         var lead = await _leads.CreateLeadAsync(
             LeadSource.Manual,
             req.Name, req.Email,
@@ -140,11 +146,11 @@ public class LeadsController : ControllerBase
         return LeadService.ToDto(lead, names);
     }
 
-    /// <summary>Soft delete — Admin only per Role Master ("Delete/Inactive").</summary>
+    /// <summary>Soft delete — "Delete/Inactive" permission (default: Admin).</summary>
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Deactivate(int id, CancellationToken ct)
     {
+        await _permissions.EnsureAsync(User.GetRole(), PermissionActions.DeleteLead, ct);
         var lead = await _leads.GetLeadOrThrowAsync(id, ct);
         lead.IsActive = false;
         lead.LastUpdateAtUtc = DateTime.UtcNow;
@@ -152,11 +158,11 @@ public class LeadsController : ControllerBase
         return NoContent();
     }
 
-    /// <summary>CSV export — Admin/Manager only per Role Master.</summary>
+    /// <summary>CSV export — "Export" permission (default: Admin/Manager).</summary>
     [HttpGet("export")]
-    [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> Export([FromQuery] string view = "all", CancellationToken ct = default)
     {
+        await _permissions.EnsureAsync(User.GetRole(), PermissionActions.Export, ct);
         var q = _db.Leads.Include(l => l.AssignedTo).Where(l => l.IsActive);
         if (view.Equals("notlead", StringComparison.OrdinalIgnoreCase))
             q = q.Where(l => l.EnquiryType == EnquiryType.NotLead);

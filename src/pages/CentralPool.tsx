@@ -23,9 +23,13 @@ export default function CentralPool() {
   const load = async () => {
     setLoading(true);
     try {
-      const [pool, u] = await Promise.all([api.listLeads({ view: "pool" }), api.users()]);
+      // Assignment targets = users whose role can own leads (default: Executives)
+      const [pool, assignable] = await Promise.all([
+        api.listLeads({ view: "pool" }),
+        api.assignableUsers()
+      ]);
       setLeads(pool);
-      setUsers(u.filter(x => x.isActive));
+      setUsers(assignable);
     } finally {
       setLoading(false);
     }
@@ -98,13 +102,15 @@ export default function CentralPool() {
                 {l.reportTitle && <span className="w-full truncate text-[#808081]">{l.reportTitle}</span>}
               </div>
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => assign(l.id, user!.userId, "you")}
-                  disabled={busyId === l.id}
-                  className="flex items-center gap-1.5 rounded-md bg-[#645BA8] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#2C2561] disabled:opacity-50"
-                >
-                  <Hand size={13} /> Pick this lead
-                </button>
+                {can("ownLeads") && (
+                  <button
+                    onClick={() => assign(l.id, user!.userId, "you")}
+                    disabled={busyId === l.id}
+                    className="flex items-center gap-1.5 rounded-md bg-[#645BA8] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#2C2561] disabled:opacity-50"
+                  >
+                    <Hand size={13} /> Pick this lead
+                  </button>
+                )}
                 {can("reassign") && (
                   <select
                     className="rounded-md border border-[#CAC8C7] px-2 py-1.5 text-xs outline-none focus:border-[#645BA8]"
@@ -116,9 +122,12 @@ export default function CentralPool() {
                       if (uid && target) assign(l.id, uid, target.fullName);
                     }}
                   >
-                    <option value="" disabled>Assign to…</option>
+                    <option value="" disabled>Assign to executive…</option>
                     {users.map(u => <option key={u.id} value={u.id}>{u.fullName}</option>)}
                   </select>
+                )}
+                {!can("ownLeads") && !can("reassign") && (
+                  <span className="text-[11px] italic text-[#808081]">View only — your role cannot handle leads</span>
                 )}
               </div>
             </div>
