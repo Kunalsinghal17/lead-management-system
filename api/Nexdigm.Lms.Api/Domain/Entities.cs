@@ -108,6 +108,18 @@ public class LeadDayUpdate
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
 }
 
+/// <summary>Individual visit event (feeds daily new-vs-returning analytics).</summary>
+public class VisitEvent
+{
+    public int Id { get; set; }
+
+    [MaxLength(50)]
+    public string IpAddress { get; set; } = "";
+
+    public DateTime VisitAtUtc { get; set; } = DateTime.UtcNow;
+    public int TimeSpentSeconds { get; set; }
+}
+
 /// <summary>BRDID13 — visitor timestamping and visit counts received from the third-party tool.</summary>
 public class VisitorStat
 {

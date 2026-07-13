@@ -1,19 +1,25 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip,
   PieChart, Pie, Cell, BarChart, Bar
 } from "recharts";
-import { RefreshCcw, TrendingDown, Zap } from "lucide-react";
+import {
+  ArrowDownRight, ArrowUpRight, ChevronRight, RefreshCcw,
+  Sparkles, TrendingDown, TriangleAlert, Zap
+} from "lucide-react";
 import { api } from "../lib/api";
 import { DashboardSummary, Lead } from "../lib/types";
 import { formatInr, ageLabel } from "../lib/format";
 import { StageBadge, StatusBadge } from "../components/Badges";
+import { generateInsights } from "../lib/nlq";
 import { useAuth } from "../lib/auth";
 
 const SERIES = ["#645BA8", "#C86AA9", "#26AD8B", "#F0AA31", "#467082", "#2D7D3E", "#D9E138"];
 
 export default function Dashboard() {
   const { user, can } = useAuth();
+  const navigate = useNavigate();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [days, setDays] = useState(30);
@@ -39,47 +45,27 @@ export default function Dashboard() {
 
   // ---------------- derived analytics ----------------
 
-  const stageCount = (name: string) =>
-    summary?.byStage.find(s => s.name === name)?.value ?? 0;
+  const stageCount = (name: string) => summary?.byStage.find(s => s.name === name)?.value ?? 0;
 
   const funnel = useMemo(() => {
     if (!summary) return [];
     const total = summary.totalLeads;
     const reachedLead = total - stageCount("Enquiry");
     const reachedProposal = stageCount("Proposal") + stageCount("Won") + stageCount("Lost");
-    const won = summary.wonLeads;
-
     const steps = [
-      { label: "Enquiries received", count: total, hint: "Website + manual + bulk (BRDID02/03/12)" },
+      { label: "Enquiries received", count: total, hint: "Website, manual entry & bulk upload" },
       { label: "Qualified as Lead", count: reachedLead, hint: "Classified Lead, moved past Enquiry" },
       { label: "Proposal shared", count: reachedProposal, hint: "Commercial discussion underway" },
-      { label: "Won", count: won, hint: `${formatInr(summary.wonValueInr)} converted` }
+      { label: "Won", count: summary.wonLeads, hint: `${formatInr(summary.wonValueInr)} converted` }
     ];
     return steps.map((s, i) => ({
       ...s,
       pctOfTotal: total === 0 ? 0 : Math.round((100 * s.count) / total),
-      stepConv: i === 0 || steps[i - 1].count === 0
-        ? null
-        : Math.round((100 * s.count) / steps[i - 1].count),
+      stepConv: i === 0 || steps[i - 1].count === 0 ? null : Math.round((100 * s.count) / steps[i - 1].count),
       dropped: i === 0 ? 0 : steps[i - 1].count - s.count
     }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [summary]);
-
-  const aging = useMemo(() => {
-    const open = leads.filter(l => l.status === "Open" && l.enquiryType !== "NotLead");
-    const buckets = [
-      { name: "0–2d", test: (d: number) => d <= 2, color: "#2D7D3E" },
-      { name: "3–5d", test: (d: number) => d >= 3 && d <= 5, color: "#26AD8B" },
-      { name: "6–10d", test: (d: number) => d >= 6 && d <= 10, color: "#F0AA31" },
-      { name: ">10d", test: (d: number) => d > 10, color: "#712B69" }
-    ];
-    return buckets.map(b => ({
-      name: b.name,
-      color: b.color,
-      value: open.filter(l => b.test(l.ageDays)).length
-    }));
-  }, [leads]);
 
   const leaderboard = useMemo(() => {
     const map = new Map<string, { open: number; won: number; lost: number; wonValue: number }>();
@@ -92,26 +78,48 @@ export default function Dashboard() {
     }
     return [...map.entries()]
       .map(([name, r]) => ({
-        name,
-        ...r,
+        name, ...r,
         conversion: r.won + r.lost === 0 ? null : Math.round((100 * r.won) / (r.won + r.lost))
       }))
       .sort((a, b) => b.wonValue - a.wonValue);
   }, [leads]);
 
-  const recent = leads.slice(0, 8);
+  const insights = useMemo(() => (summary ? generateInsights(summary) : null), [summary]);
 
-  if (!summary) {
+  if (!summary || !insights) {
     return <div className="py-24 text-center text-sm text-[#808081]">Loading dashboard…</div>;
   }
 
-  const kpis = [
-    { label: "Total Leads", value: String(summary.totalLeads), sub: `${summary.closedNotLeads} not-lead auto-closed` },
-    { label: "Open Leads", value: String(summary.openLeads), sub: `${summary.unassignedLeads} awaiting owner` },
-    { label: "Conversion Rate", value: `${summary.conversionRatePct}%`, sub: `${summary.wonLeads} won · ${summary.lostLeads} lost` },
-    { label: "Pipeline Value", value: formatInr(summary.pipelineValueInr), sub: "open opportunities" },
-    { label: "Won Value", value: formatInr(summary.wonValueInr), sub: `${formatInr(summary.lostValueInr)} lost` }
+  const na = summary.needsAttention;
+  const attention = [
+    { key: "escalated", label: "Escalated leads", sub: "Open more than 10 days", count: na.escalated, color: "#712B69" },
+    { key: "missing", label: "Missing updates", sub: "Daily updates D1–D5", count: na.missingUpdates, color: "#BC852C" },
+    { key: "aging", label: "Aging leads", sub: "Open more than 5 days", count: na.aging, color: "#F0AA31" },
+    { key: "unassigned", label: "Unassigned", sub: "Sitting in central pool", count: na.unassigned, color: "#467082" },
+    { key: "unclassified", label: "Unclassified", sub: "Pending enquiry-type", count: na.unclassified, color: "#808081" }
   ];
+
+  const drill = (key: string) => {
+    if (key === "unassigned") navigate("/central-pool");
+    else navigate("/leads", { state: { preset: key } });
+  };
+
+  const kpis = [
+    { label: "Total Leads", value: String(summary.totalLeads), delta: summary.deltas.totalLeadsPct, deltaLabel: "vs prior period" },
+    { label: "Open Leads", value: String(summary.openLeads), delta: null, deltaLabel: `${summary.unassignedLeads} awaiting owner` },
+    { label: "Conversion Rate", value: `${summary.conversionRatePct}%`, delta: summary.deltas.conversionPts, deltaLabel: "pts vs prior", isPts: true },
+    { label: "Pipeline Value", value: formatInr(summary.pipelineValueInr), delta: summary.deltas.pipelineValuePct, deltaLabel: "vs prior period" },
+    { label: "Won Value", value: formatInr(summary.wonValueInr), delta: summary.deltas.wonValuePct, deltaLabel: "vs prior period" }
+  ];
+
+  const classification = [
+    { name: "Lead", value: summary.totalLeads },
+    { name: "Not Lead", value: summary.closedNotLeads }
+  ];
+  const classTotal = summary.totalLeads + summary.closedNotLeads;
+
+  const adherenceTarget = 90;
+  const ring = Math.min(100, Math.max(0, summary.adherencePct));
 
   return (
     <div>
@@ -119,7 +127,10 @@ export default function Dashboard() {
         <div>
           <h1 className="text-xl font-bold text-[#333333]">Dashboard</h1>
           <p className="text-sm text-[#808081]">
-            Welcome back, {user?.fullName?.split(" ")[0]}. Here is the pipeline right now.
+            Welcome back, {user?.fullName?.split(" ")[0]}.
+            {summary.scope === "own" && " Showing your leads only."}
+            {summary.scope === "team" && " Showing your team's pipeline."}
+            {summary.scope === "all" && " Here is the pipeline right now."}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -127,7 +138,7 @@ export default function Dashboard() {
             <button
               onClick={simulate}
               className="flex items-center gap-1.5 rounded-md border border-[#C6BDDD] px-3 py-1.5 text-xs font-bold text-[#645BA8] hover:bg-[#C6BDDD] hover:bg-opacity-20"
-              title="Simulate a website enquiry arriving via the MarketRAdmin API (BRDID02)"
+              title="Simulate a website enquiry arriving via the MarketRAdmin API"
             >
               <Zap size={13} /> Simulate web enquiry
             </button>
@@ -147,18 +158,164 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* KPI row */}
+      {/* KPI row with deltas */}
       <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
         {kpis.map(k => (
           <div key={k.label} className="rounded-lg border border-[#DFDDDD] p-4">
             <div className="text-xs font-bold uppercase tracking-wide text-[#808081]">{k.label}</div>
             <div className="mt-1 text-2xl font-bold text-[#333333]">{k.value}</div>
-            <div className="mt-1 text-xs text-[#808081]">{k.sub}</div>
+            <div className="mt-1 flex items-center gap-1 text-xs">
+              {k.delta !== null && (
+                <span className="flex items-center gap-0.5 font-bold" style={{ color: k.delta >= 0 ? "#2D7D3E" : "#712B69" }}>
+                  {k.delta >= 0 ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
+                  {Math.abs(k.delta)}{k.isPts ? "" : "%"}
+                </span>
+              )}
+              <span className="text-[#808081]">{k.deltaLabel}</span>
+            </div>
           </div>
         ))}
       </div>
 
-      {/* Conversion funnel (BRDID07 lifecycle) */}
+      {/* Classification + Needs attention + Adherence */}
+      <div className="mb-6 grid gap-4 lg:grid-cols-3">
+        <div className="rounded-lg border border-[#DFDDDD] p-4">
+          <div className="text-sm font-bold text-[#333333]">Enquiry classification</div>
+          <div className="text-xs text-[#808081]">Lead vs Not Lead</div>
+          <div className="h-36">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={classification} dataKey="value" nameKey="name" innerRadius={36} outerRadius={56} paddingAngle={3} strokeWidth={0}>
+                  <Cell fill="#645BA8" />
+                  <Cell fill="#C6BDDD" />
+                </Pie>
+                <Tooltip contentStyle={{ fontSize: 12, borderColor: "#DFDDDD" }} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-center">
+            <div>
+              <div className="text-lg font-bold text-[#645BA8]">{summary.totalLeads}</div>
+              <div className="text-[11px] text-[#808081]">
+                Lead · {classTotal === 0 ? 0 : Math.round((100 * summary.totalLeads) / classTotal)}% of total
+              </div>
+            </div>
+            <div>
+              <div className="text-lg font-bold text-[#333333]">{summary.closedNotLeads}</div>
+              <div className="text-[11px] text-[#808081]">
+                Not Lead · {classTotal === 0 ? 0 : Math.round((100 * summary.closedNotLeads) / classTotal)}% of total
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-[#DFDDDD] p-4">
+          <div className="flex items-center gap-1.5 text-sm font-bold text-[#333333]">
+            <TriangleAlert size={14} className="text-[#F0AA31]" /> Needs attention
+          </div>
+          <div className="mb-2 text-xs text-[#808081]">{summary.openLeads} open — click to drill down</div>
+          <div className="space-y-1">
+            {attention.map(a => (
+              <button
+                key={a.key}
+                onClick={() => drill(a.key)}
+                className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left hover:bg-[#DFDDDD] hover:bg-opacity-30"
+              >
+                <span>
+                  <span className="block text-xs font-bold text-[#333333]">{a.label}</span>
+                  <span className="block text-[10px] text-[#808081]">{a.sub}</span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="text-base font-bold" style={{ color: a.color }}>{a.count}</span>
+                  <ChevronRight size={13} className="text-[#B5B5B6]" />
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-[#DFDDDD] p-4">
+          <div className="text-sm font-bold text-[#333333]">Follow-up adherence</div>
+          <div className="text-xs text-[#808081]">D1–D5 updates vs the {adherenceTarget}% target</div>
+          <div className="flex items-center justify-center py-3">
+            <svg width="132" height="132" viewBox="0 0 132 132" role="img"
+              aria-label={`Adherence ${summary.adherencePct}%`}>
+              <circle cx="66" cy="66" r="54" fill="none" stroke="#DFDDDD" strokeWidth="12" />
+              <circle
+                cx="66" cy="66" r="54" fill="none"
+                stroke={ring >= adherenceTarget ? "#2D7D3E" : ring >= 60 ? "#F0AA31" : "#712B69"}
+                strokeWidth="12" strokeLinecap="round"
+                strokeDasharray={`${(ring / 100) * 339.3} 339.3`}
+                transform="rotate(-90 66 66)"
+              />
+              <text x="66" y="62" textAnchor="middle" fontSize="22" fontWeight="bold" fill="#333333"
+                fontFamily="Arial, Helvetica, sans-serif">{summary.adherencePct}%</text>
+              <text x="66" y="80" textAnchor="middle" fontSize="10" fill="#808081"
+                fontFamily="Arial, Helvetica, sans-serif">Adherence</text>
+            </svg>
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-center text-xs">
+            <div>
+              <div className="text-base font-bold text-[#2D7D3E]">{summary.adherenceOnTrack}</div>
+              <div className="text-[10px] uppercase tracking-wide text-[#808081]">On track</div>
+            </div>
+            <div>
+              <div className="text-base font-bold text-[#712B69]">{summary.adherenceMissed}</div>
+              <div className="text-[10px] uppercase tracking-wide text-[#808081]">Missed</div>
+            </div>
+            <div>
+              <div className="text-base font-bold" style={{ color: "#BC852C" }}>{adherenceTarget}%</div>
+              <div className="text-[10px] uppercase tracking-wide text-[#808081]">Target</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* AI insights (rule-based) */}
+      <div className="mb-6 rounded-lg border border-[#DFDDDD] p-5">
+        <div className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-[#808081]">
+          <Sparkles size={13} className="text-[#C86AA9]" /> Insights — computed from live data, no external AI
+        </div>
+        <p className="mb-3 text-sm font-bold text-[#333333]">{insights.headline}</p>
+        <div className="grid gap-2 md:grid-cols-2">
+          <div className="space-y-1.5">
+            <div className="text-[10px] font-bold uppercase tracking-wide text-[#2D7D3E]">Wins</div>
+            {insights.wins.map((w, i) => (
+              <div key={i} className="flex gap-2 rounded-md bg-[#C4E4C4] bg-opacity-30 px-3 py-2">
+                <span className="shrink-0 text-sm font-bold text-[#2D7D3E]">{w.metric}</span>
+                <span className="text-xs text-[#333333]">{w.text}</span>
+              </div>
+            ))}
+          </div>
+          <div className="space-y-1.5">
+            <div className="text-[10px] font-bold uppercase tracking-wide text-[#712B69]">Risks</div>
+            {insights.risks.length === 0 ? (
+              <div className="rounded-md bg-[#DFDDDD] bg-opacity-40 px-3 py-2 text-xs text-[#333333]">
+                No material risks detected in this period.
+              </div>
+            ) : (
+              insights.risks.map((r, i) => (
+                <div
+                  key={i}
+                  className="flex gap-2 rounded-md px-3 py-2"
+                  style={{ backgroundColor: r.severity === "critical" ? "rgba(236, 202, 224, 0.5)" : "rgba(251, 229, 195, 0.5)" }}
+                >
+                  <span className="shrink-0 text-sm font-bold" style={{ color: r.severity === "critical" ? "#712B69" : "#BC852C" }}>
+                    {r.metric}
+                  </span>
+                  <span className="text-xs text-[#333333]">{r.text}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+        <div className="mt-3 flex items-start gap-2 rounded-md border border-[#C6BDDD] bg-[#C6BDDD] bg-opacity-10 px-3 py-2">
+          <span className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#645BA8]">Recommended action</span>
+          <span className="flex-1 text-xs text-[#333333]">{insights.recommendedAction}</span>
+        </div>
+      </div>
+
+      {/* Conversion funnel */}
       <div className="mb-6 rounded-lg border border-[#DFDDDD] p-5">
         <div className="mb-4 flex items-center justify-between">
           <div>
@@ -173,7 +330,6 @@ export default function Dashboard() {
               : 0}%
           </span>
         </div>
-
         <div className="space-y-1.5">
           {funnel.map((step, i) => {
             const width = Math.max(9, step.pctOfTotal);
@@ -213,7 +369,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Trend + source mix */}
+      {/* Trend + sources */}
       <div className="mb-6 grid gap-4 lg:grid-cols-3">
         <div className="rounded-lg border border-[#DFDDDD] p-4 lg:col-span-2">
           <div className="mb-2 flex items-center justify-between">
@@ -226,9 +382,7 @@ export default function Dashboard() {
                 <button
                   key={d}
                   onClick={() => { setDays(d); load(d); }}
-                  className={`rounded px-2 py-1 text-xs font-bold ${
-                    days === d ? "bg-[#645BA8] text-white" : "text-[#808081] hover:bg-[#DFDDDD]"
-                  }`}
+                  className={`rounded px-2 py-1 text-xs font-bold ${days === d ? "bg-[#645BA8] text-white" : "text-[#808081] hover:bg-[#DFDDDD]"}`}
                 >
                   {d}D
                 </button>
@@ -244,17 +398,9 @@ export default function Dashboard() {
                     <stop offset="100%" stopColor="#645BA8" stopOpacity={0.02} />
                   </linearGradient>
                 </defs>
-                <XAxis
-                  dataKey="date"
-                  tick={{ fontSize: 10, fill: "#808081" }}
-                  tickFormatter={(v: string) => v.slice(5)}
-                  interval="preserveStartEnd"
-                />
+                <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#808081" }} tickFormatter={(v: string) => v.slice(5)} interval="preserveStartEnd" />
                 <YAxis tick={{ fontSize: 10, fill: "#808081" }} allowDecimals={false} />
-                <Tooltip
-                  contentStyle={{ fontSize: 12, borderColor: "#DFDDDD" }}
-                  labelStyle={{ color: "#333333", fontWeight: 700 }}
-                />
+                <Tooltip contentStyle={{ fontSize: 12, borderColor: "#DFDDDD" }} labelStyle={{ color: "#333333", fontWeight: 700 }} />
                 <Area type="monotone" dataKey="count" stroke="#645BA8" strokeWidth={2} fill="url(#trendFill)" name="Enquiries" />
               </AreaChart>
             </ResponsiveContainer>
@@ -267,18 +413,8 @@ export default function Dashboard() {
           <div className="h-40">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie
-                  data={summary.bySource}
-                  dataKey="value"
-                  nameKey="name"
-                  innerRadius={38}
-                  outerRadius={60}
-                  paddingAngle={3}
-                  strokeWidth={0}
-                >
-                  {summary.bySource.map((_, i) => (
-                    <Cell key={i} fill={SERIES[i % SERIES.length]} />
-                  ))}
+                <Pie data={summary.bySource} dataKey="value" nameKey="name" innerRadius={38} outerRadius={60} paddingAngle={3} strokeWidth={0}>
+                  {summary.bySource.map((_, i) => <Cell key={i} fill={SERIES[i % SERIES.length]} />)}
                 </Pie>
                 <Tooltip contentStyle={{ fontSize: 12, borderColor: "#DFDDDD" }} />
               </PieChart>
@@ -296,42 +432,15 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Aging + industries + leaderboard */}
-      <div className="mb-6 grid gap-4 lg:grid-cols-3">
-        <div className="rounded-lg border border-[#DFDDDD] p-4">
-          <div className="text-sm font-bold text-[#333333]">Open-lead aging</div>
-          <div className="mb-2 text-xs text-[#808081]">Reminders at 5d · escalation at 10d (BRDID10)</div>
-          <div className="h-44">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={aging} margin={{ top: 4, right: 4, bottom: 0, left: -28 }}>
-                <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#808081" }} interval={0} />
-                <YAxis tick={{ fontSize: 10, fill: "#808081" }} allowDecimals={false} />
-                <Tooltip contentStyle={{ fontSize: 12, borderColor: "#DFDDDD" }} />
-                <Bar dataKey="value" radius={[4, 4, 0, 0]} name="Open leads">
-                  {aging.map((b, i) => <Cell key={i} fill={b.color} />)}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
+      {/* Industries + leaderboard */}
+      <div className="mb-6 grid gap-4 lg:grid-cols-2">
         <div className="rounded-lg border border-[#DFDDDD] p-4">
           <div className="mb-2 text-sm font-bold text-[#333333]">Top industries</div>
           <div className="h-48">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={summary.byIndustry.slice(0, 6)}
-                layout="vertical"
-                margin={{ top: 0, right: 8, bottom: 0, left: 0 }}
-              >
+              <BarChart data={summary.byIndustry.slice(0, 6)} layout="vertical" margin={{ top: 0, right: 8, bottom: 0, left: 0 }}>
                 <XAxis type="number" tick={{ fontSize: 10, fill: "#808081" }} allowDecimals={false} />
-                <YAxis
-                  type="category"
-                  dataKey="name"
-                  width={104}
-                  interval={0}
-                  tick={{ fontSize: 11, fill: "#333333" }}
-                />
+                <YAxis type="category" dataKey="name" width={104} interval={0} tick={{ fontSize: 11, fill: "#333333" }} />
                 <Tooltip contentStyle={{ fontSize: 12, borderColor: "#DFDDDD" }} />
                 <Bar dataKey="value" fill="#9F91C6" radius={[0, 4, 4, 0]} name="Leads" />
               </BarChart>
@@ -388,7 +497,7 @@ export default function Dashboard() {
             </tr>
           </thead>
           <tbody>
-            {recent.map(l => (
+            {leads.slice(0, 8).map(l => (
               <tr key={l.id} className="border-t border-[#DFDDDD] hover:bg-[#DFDDDD] hover:bg-opacity-20">
                 <td className="px-4 py-2.5 text-xs font-bold text-[#645BA8]">{l.leadCode}</td>
                 <td className="px-4 py-2.5 font-bold text-[#333333]">{l.name}</td>
@@ -408,10 +517,7 @@ export default function Dashboard() {
 
       {can("export") && (
         <div className="mt-3 text-right">
-          <button
-            onClick={() => api.exportLeads("all")}
-            className="text-xs font-bold text-[#645BA8] hover:underline"
-          >
+          <button onClick={() => api.exportLeads("all")} className="text-xs font-bold text-[#645BA8] hover:underline">
             Export all leads (CSV)
           </button>
         </div>

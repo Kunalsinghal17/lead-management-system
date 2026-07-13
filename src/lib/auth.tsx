@@ -24,7 +24,14 @@ export type PermissionAction =
   | "reassign"
   | "createLead"
   | "bulkUpload"
-  | "ownLeads";
+  | "ownLeads"
+  | "pageDashboard"
+  | "pageAskAI"
+  | "pageLeads"
+  | "pageCentralPool"
+  | "pageBulkUpload"
+  | "pageVisitorAnalytics"
+  | "pageUsersRoles";
 
 /** UI action → matrix action key (as stored in the DB / mock). */
 const ACTION_KEYS: Record<PermissionAction, string> = {
@@ -34,7 +41,14 @@ const ACTION_KEYS: Record<PermissionAction, string> = {
   reassign: "Reassign",
   createLead: "CreateLead",
   bulkUpload: "BulkUpload",
-  ownLeads: "OwnLeads"
+  ownLeads: "OwnLeads",
+  pageDashboard: "PageDashboard",
+  pageAskAI: "PageAskAI",
+  pageLeads: "PageLeads",
+  pageCentralPool: "PageCentralPool",
+  pageBulkUpload: "PageBulkUpload",
+  pageVisitorAnalytics: "PageVisitorAnalytics",
+  pageUsersRoles: "PageUsersRoles"
 };
 
 /** Fallbacks while the matrix loads (BRD Role Master defaults). */
@@ -45,7 +59,14 @@ const DEFAULTS: Record<PermissionAction, string[]> = {
   reassign: ["Admin", "Manager"],
   createLead: ["Admin", "Manager", "Executive"],
   bulkUpload: ["Admin", "Manager", "Executive"],
-  ownLeads: ["Executive"]
+  ownLeads: ["Executive"],
+  pageDashboard: ["Admin", "Manager", "Executive", "Basic"],
+  pageAskAI: ["Admin", "Manager", "Executive", "Basic"],
+  pageLeads: ["Admin", "Manager", "Executive", "Basic"],
+  pageCentralPool: ["Admin", "Manager", "Executive", "Basic"],
+  pageBulkUpload: ["Admin", "Manager", "Executive"],
+  pageVisitorAnalytics: ["Admin", "Manager", "Executive"],
+  pageUsersRoles: ["Admin"]
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -85,9 +106,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(session);
   }, []);
 
-  // Load the live permission matrix once signed in
+  // Load the live permission matrix once signed in, keep it fresh on every
+  // data change and on a slow poll — so Admin edits apply to running sessions
+  // without a re-login.
   useEffect(() => {
-    if (user) refreshPermissions();
+    if (!user) return;
+    refreshPermissions();
+    const onChange = () => refreshPermissions();
+    window.addEventListener("lms:data-changed", onChange);
+    const t = window.setInterval(refreshPermissions, 60_000);
+    return () => {
+      window.removeEventListener("lms:data-changed", onChange);
+      window.clearInterval(t);
+    };
   }, [user, refreshPermissions]);
 
   // Idle timeout — re-login required after inactivity

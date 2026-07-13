@@ -1,11 +1,17 @@
 import React, { useEffect, useState } from "react";
-import { BellRing, RotateCcw, Save, UserPlus } from "lucide-react";
+import { BellRing, Pencil, RotateCcw, Save, UserPlus } from "lucide-react";
 import { api, ApiError } from "../lib/api";
-import { NotificationRow, PERMISSION_LABELS, PermissionMatrix, Role, UserRow } from "../lib/types";
+import {
+  LOCKED_PERMISSIONS, NotificationRow, PAGE_PERMISSION_LABELS, PERMISSION_LABELS,
+  PermissionMatrix, Role, UserRow
+} from "../lib/types";
 import { formatDateTime } from "../lib/format";
 import { useAuth } from "../lib/auth";
 
 const ROLES: Role[] = ["Admin", "Manager", "Executive", "Basic"];
+
+const isLocked = (action: string, role: Role) =>
+  LOCKED_PERMISSIONS.some(([a, r]) => a === action && r === role);
 
 /**
  * BRDID01 — Users, the EDITABLE role/access matrix (stored in the database,
@@ -18,6 +24,7 @@ export default function UsersRoles() {
   const [savedMatrix, setSavedMatrix] = useState<string>("");
   const [logs, setLogs] = useState<NotificationRow[]>([]);
   const [showAdd, setShowAdd] = useState(false);
+  const [editUser, setEditUser] = useState<UserRow | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -35,7 +42,7 @@ export default function UsersRoles() {
   const dirty = matrix !== null && JSON.stringify(matrix) !== savedMatrix;
 
   const toggle = (action: string, role: Role) => {
-    if (action === "AddUser" && role === "Admin") return; // lockout guard
+    if (isLocked(action, role)) return; // lockout guard
     setMatrix(m => {
       if (!m) return m;
       return { ...m, [action]: { ...m[action], [role]: !m[action][role] } };
@@ -63,6 +70,38 @@ export default function UsersRoles() {
   const discard = () => {
     if (savedMatrix) setMatrix(JSON.parse(savedMatrix));
   };
+
+  const permissionRow = (action: string, label: string) => (
+    <tr key={action} className="border-t border-[#DFDDDD]">
+      <td className="px-4 py-2 font-bold text-[#333333]">{label}</td>
+      {ROLES.map(role => {
+        const allowed = matrix?.[action]?.[role] ?? false;
+        const locked = isLocked(action, role);
+        return (
+          <td key={role} className="px-4 py-2 text-center">
+            <button
+              onClick={() => toggle(action, role)}
+              disabled={locked || busy}
+              aria-label={`${label} for ${role}: ${allowed ? "allowed" : "not allowed"}`}
+              className="mx-auto block rounded-full transition-opacity disabled:cursor-not-allowed"
+              style={{ opacity: locked ? 0.6 : 1 }}
+              title={locked ? "Locked to prevent Admin lockout" : "Click to toggle"}
+            >
+              <span
+                className="inline-flex h-5 w-9 items-center rounded-full p-0.5 transition-colors"
+                style={{ backgroundColor: allowed ? "#2D7D3E" : "#CAC8C7" }}
+              >
+                <span
+                  className="h-4 w-4 rounded-full bg-white transition-transform"
+                  style={{ transform: allowed ? "translateX(16px)" : "translateX(0)" }}
+                />
+              </span>
+            </button>
+          </td>
+        );
+      })}
+    </tr>
+  );
 
   const runSweep = async () => {
     setBusy(true);
@@ -133,6 +172,7 @@ export default function UsersRoles() {
               <th className="px-4 py-2.5 font-bold">Role</th>
               <th className="px-4 py-2.5 font-bold">Reports to</th>
               <th className="px-4 py-2.5 font-bold">Status</th>
+              <th className="px-4 py-2.5 text-right font-bold">Edit</th>
             </tr>
           </thead>
           <tbody>
@@ -147,6 +187,15 @@ export default function UsersRoles() {
                     {u.isActive ? "Active" : "Inactive"}
                   </span>
                 </td>
+                <td className="px-4 py-2.5 text-right">
+                  <button
+                    onClick={() => setEditUser(u)}
+                    className="rounded p-1.5 text-[#808081] hover:bg-[#C6BDDD] hover:bg-opacity-30 hover:text-[#645BA8]"
+                    aria-label={`Edit ${u.fullName}`}
+                  >
+                    <Pencil size={14} />
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -160,8 +209,9 @@ export default function UsersRoles() {
             <div>
               <div className="text-sm font-bold text-[#333333]">Role & access mapping</div>
               <div className="text-xs text-[#808081]">
-                Click any cell to toggle. Saved settings are stored in the database and enforced by
-                the API on every request. "Add User" stays locked for Admin so access can always be recovered.
+                Click any cell to toggle, then Save. Settings are stored in the database, enforced by the
+                API on every request, and picked up by running sessions within a minute — no re-login needed.
+                "Manage Users" and "Page: Users & Roles" stay locked for Admin so access can always be recovered.
               </div>
             </div>
             {dirty && (
@@ -186,44 +236,27 @@ export default function UsersRoles() {
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="text-xs uppercase tracking-wide text-[#808081]">
-                <th className="px-4 py-2 font-bold">Action</th>
+                <th className="px-4 py-2 font-bold">Access</th>
                 {ROLES.map(r => (
                   <th key={r} className="px-4 py-2 text-center font-bold">{r}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {Object.keys(PERMISSION_LABELS).map(action => (
-                <tr key={action} className="border-t border-[#DFDDDD]">
-                  <td className="px-4 py-2 font-bold text-[#333333]">{PERMISSION_LABELS[action]}</td>
-                  {ROLES.map(role => {
-                    const allowed = matrix[action]?.[role] ?? false;
-                    const locked = action === "AddUser" && role === "Admin";
-                    return (
-                      <td key={role} className="px-4 py-2 text-center">
-                        <button
-                          onClick={() => toggle(action, role)}
-                          disabled={locked || busy}
-                          aria-label={`${PERMISSION_LABELS[action]} for ${role}: ${allowed ? "allowed" : "not allowed"}`}
-                          className="mx-auto block rounded-full transition-opacity disabled:cursor-not-allowed"
-                          style={{ opacity: locked ? 0.6 : 1 }}
-                          title={locked ? "Locked to prevent Admin lockout" : "Click to toggle"}
-                        >
-                          <span
-                            className="inline-flex h-5 w-9 items-center rounded-full p-0.5 transition-colors"
-                            style={{ backgroundColor: allowed ? "#2D7D3E" : "#CAC8C7" }}
-                          >
-                            <span
-                              className="h-4 w-4 rounded-full bg-white transition-transform"
-                              style={{ transform: allowed ? "translateX(16px)" : "translateX(0)" }}
-                            />
-                          </span>
-                        </button>
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
+              <tr className="border-t border-[#DFDDDD] bg-[#DFDDDD] bg-opacity-20">
+                <td colSpan={5} className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#645BA8]">
+                  Module access — which pages the role can open
+                </td>
+              </tr>
+              {Object.keys(PAGE_PERMISSION_LABELS).map(action =>
+                permissionRow(action, PAGE_PERMISSION_LABELS[action]))}
+              <tr className="border-t border-[#DFDDDD] bg-[#DFDDDD] bg-opacity-20">
+                <td colSpan={5} className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#645BA8]">
+                  Actions — what the role can do
+                </td>
+              </tr>
+              {Object.keys(PERMISSION_LABELS).map(action =>
+                permissionRow(action, PERMISSION_LABELS[action]))}
             </tbody>
           </table>
         </div>
@@ -297,6 +330,115 @@ export default function UsersRoles() {
           onAdded={() => { setShowAdd(false); load(); }}
         />
       )}
+
+      {editUser && (
+        <EditUserModal
+          user={editUser}
+          users={users}
+          onClose={() => setEditUser(null)}
+          onSaved={() => { setEditUser(null); load(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function EditUserModal({ user, users, onClose, onSaved }: {
+  user: UserRow;
+  users: UserRow[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [fullName, setFullName] = useState(user.fullName);
+  const [role, setRole] = useState<Role>(user.role);
+  const [managerId, setManagerId] = useState(user.managerId ? String(user.managerId) : "");
+  const [isActive, setIsActive] = useState(user.isActive);
+  const [newPassword, setNewPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      await api.updateUser(user.id, {
+        fullName,
+        role,
+        managerId: managerId ? Number(managerId) : null,
+        isActive,
+        newPassword: newPassword || null
+      });
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save the user.");
+      setBusy(false);
+    }
+  };
+
+  const input = "w-full rounded-md border border-[#CAC8C7] px-3 py-2 text-sm outline-none focus:border-[#645BA8]";
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+      <button className="absolute inset-0" style={{ backgroundColor: "rgba(33, 28, 72, 0.45)" }} onClick={onClose} aria-label="Close" />
+      <form onSubmit={submit} className="relative z-10 w-full max-w-md rounded-lg bg-white p-6 shadow-2xl">
+        <h2 className="mb-1 text-lg font-bold text-[#333333]">Edit user</h2>
+        <p className="mb-4 text-xs text-[#808081]">{user.email}</p>
+
+        {error && (
+          <div className="mb-3 rounded-md px-3 py-2 text-sm" style={{ backgroundColor: "#ECCAE0", color: "#55204F" }}>
+            {error}
+          </div>
+        )}
+
+        <label className="mb-1 block text-xs font-bold text-[#333333]">Full name *</label>
+        <input className={`${input} mb-3`} required maxLength={100} value={fullName} onChange={e => setFullName(e.target.value)} />
+
+        <div className="mb-3 grid grid-cols-2 gap-3">
+          <div>
+            <label className="mb-1 block text-xs font-bold text-[#333333]">Role *</label>
+            <select className={input} value={role} onChange={e => setRole(e.target.value as Role)}>
+              {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+            {role !== user.role && (
+              <p className="mt-1 text-[11px] text-[#808081]">
+                Role change applies to their running session within a minute.
+              </p>
+            )}
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-bold text-[#333333]">Reports to</label>
+            <select className={input} value={managerId} onChange={e => setManagerId(e.target.value)}>
+              <option value="">None</option>
+              {users
+                .filter(u => u.id !== user.id && (u.role === "Manager" || u.role === "Admin"))
+                .map(u => <option key={u.id} value={u.id}>{u.fullName}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <label className="mb-1 block text-xs font-bold text-[#333333]">Reset password (optional, min 8 chars)</label>
+        <input className={`${input} mb-3`} type="password" minLength={8} maxLength={100}
+          value={newPassword} onChange={e => setNewPassword(e.target.value)}
+          placeholder="Leave blank to keep the current password" />
+
+        <label className="mb-4 flex cursor-pointer items-center gap-2 text-sm text-[#333333]">
+          <input type="checkbox" checked={isActive} onChange={e => setIsActive(e.target.checked)} />
+          <span className="font-bold">Active</span>
+          <span className="text-xs text-[#808081]">— inactive users cannot sign in or receive leads</span>
+        </label>
+
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose}
+            className="rounded-md border border-[#CAC8C7] px-4 py-2 text-sm font-bold text-[#333333] hover:bg-[#DFDDDD]">
+            Cancel
+          </button>
+          <button type="submit" disabled={busy}
+            className="rounded-md bg-[#645BA8] px-4 py-2 text-sm font-bold text-white hover:bg-[#2C2561] disabled:opacity-50">
+            {busy ? "Saving…" : "Save user"}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

@@ -262,7 +262,7 @@ public class LeadService
             {
                 var reason = req.LostReason ?? lead.LostReason;
                 if (string.IsNullOrWhiteSpace(reason))
-                    throw new BusinessRuleException("Lost Reason is mandatory when marking a lead as Lost (BRDID09).");
+                    throw new BusinessRuleException("Lost Reason is mandatory when marking a lead as Lost.");
                 if (reason.Equals("Other", StringComparison.OrdinalIgnoreCase) &&
                     string.IsNullOrWhiteSpace(req.LostReasonOther ?? lead.LostReasonOther))
                     throw new BusinessRuleException("Please describe the reason when 'Other' is selected.");
@@ -303,7 +303,7 @@ public class LeadService
         if (lead.AssignedToUserId is null)
             throw new BusinessRuleException("Assign the lead before recording day-wise updates.");
         if (lead.EnquiryType != EnquiryType.Lead)
-            throw new BusinessRuleException("Day-wise updates apply to classified Leads only (BRDID05/06).");
+            throw new BusinessRuleException("Day-wise updates apply to classified Leads only.");
         if (LeadRules.IsFinal(lead.Status))
             throw new BusinessRuleException("Lead is closed — day-wise updates are no longer required.");
         if (req.DayNumber is < 1 or > 5)

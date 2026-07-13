@@ -30,10 +30,13 @@ public class BulkUploadController : ControllerBase
             "nexdigm-lms-bulk-upload-template.xlsx");
     }
 
-    /// <summary>BRDID12 — validated Excel import. Valid rows insert; invalid rows return row-level errors.</summary>
+    /// <summary>
+    /// BRDID12 — two-step import. dryRun=true validates and returns a full row-by-row
+    /// preview (Valid / Error / Duplicate); dryRun=false imports the valid rows.
+    /// </summary>
     [HttpPost]
     [RequestSizeLimit(10 * 1024 * 1024)]
-    public async Task<ActionResult<BulkUploadResult>> Upload(IFormFile file, CancellationToken ct)
+    public async Task<ActionResult<BulkUploadResult>> Upload(IFormFile file, [FromQuery] bool dryRun = false, CancellationToken ct = default)
     {
         await _permissions.EnsureAsync(User.GetRole(), PermissionActions.BulkUpload, ct);
         if (file is null || file.Length == 0)
@@ -42,7 +45,7 @@ public class BulkUploadController : ControllerBase
             return BadRequest(new { message = "Only .xlsx files exported from the system template are accepted." });
 
         await using var stream = file.OpenReadStream();
-        var result = await _excel.ImportAsync(stream, ct);
+        var result = await _excel.ImportAsync(stream, dryRun, ct);
         return result;
     }
 }

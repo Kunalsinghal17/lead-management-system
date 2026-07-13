@@ -302,6 +302,27 @@ public static class DbSeeder
         }
 
         db.VisitorStats.AddRange(stats);
+
+        // Individual visit events consistent with the per-IP aggregates —
+        // first event on FirstVisit day, the rest spread up to LastVisit.
+        foreach (var s in stats)
+        {
+            var span = Math.Max(0, (int)(s.LastVisitAtUtc.Date - s.FirstVisitAtUtc.Date).TotalDays);
+            var perVisit = Math.Max(20, s.TimeSpentSeconds / Math.Max(1, s.VisitCount));
+            for (var v = 0; v < s.VisitCount; v++)
+            {
+                var when = v == 0
+                    ? s.FirstVisitAtUtc
+                    : s.FirstVisitAtUtc.AddDays(rnd.Next(0, span + 1)).AddHours(rnd.Next(6, 22));
+                db.VisitEvents.Add(new VisitEvent
+                {
+                    IpAddress = s.IpAddress,
+                    VisitAtUtc = when,
+                    TimeSpentSeconds = perVisit
+                });
+            }
+        }
+
         await db.SaveChangesAsync();
     }
 }

@@ -11,6 +11,7 @@ public class LmsDbContext : DbContext
     public DbSet<Lead> Leads => Set<Lead>();
     public DbSet<LeadDayUpdate> LeadDayUpdates => Set<LeadDayUpdate>();
     public DbSet<VisitorStat> VisitorStats => Set<VisitorStat>();
+    public DbSet<VisitEvent> VisitEvents => Set<VisitEvent>();
     public DbSet<NotificationLog> NotificationLogs => Set<NotificationLog>();
     public DbSet<MasterItem> MasterItems => Set<MasterItem>();
 
@@ -57,6 +58,12 @@ public class LmsDbContext : DbContext
         modelBuilder.Entity<VisitorStat>(e =>
         {
             e.HasIndex(v => v.IpAddress).IsUnique();
+        });
+
+        modelBuilder.Entity<VisitEvent>(e =>
+        {
+            e.HasIndex(v => v.VisitAtUtc);
+            e.HasIndex(v => v.IpAddress);
         });
 
         modelBuilder.Entity<NotificationLog>(e =>

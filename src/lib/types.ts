@@ -91,6 +91,22 @@ export interface NameValue {
   value: number;
 }
 
+export interface NeedsAttention {
+  escalated: number;
+  missingUpdates: number;
+  aging: number;
+  unassigned: number;
+  unclassified: number;
+}
+
+export interface PeriodDeltas {
+  totalLeadsPct: number;
+  wonPct: number;
+  conversionPts: number;
+  pipelineValuePct: number;
+  wonValuePct: number;
+}
+
 export interface DashboardSummary {
   totalLeads: number;
   openLeads: number;
@@ -107,6 +123,37 @@ export interface DashboardSummary {
   byStage: NameValue[];
   byIndustry: NameValue[];
   lostReasons: NameValue[];
+  needsAttention: NeedsAttention;
+  adherencePct: number;
+  adherenceOnTrack: number;
+  adherenceMissed: number;
+  deltas: PeriodDeltas;
+  /** all | team | own — the data context this summary was computed in */
+  scope: string;
+}
+
+export interface DailyVisits {
+  date: string;
+  newVisitors: number;
+  returningVisitors: number;
+}
+
+export interface DistributionBucket {
+  name: string;
+  value: number;
+  pct: number;
+}
+
+export interface VisitorAnalytics {
+  totalVisits: number;
+  uniqueVisitors: number;
+  returningVisitors: number;
+  avgTimeSeconds: number;
+  peakDayVisits: number;
+  avgVisitsPerDay: number;
+  daily: DailyVisits[];
+  frequency: DistributionBucket[];
+  timeOnSite: DistributionBucket[];
 }
 
 export interface Masters {
@@ -119,16 +166,26 @@ export interface Masters {
   roleMatrix: Record<string, Record<string, boolean>>;
 }
 
-export interface BulkRowError {
+export interface BulkRowPreview {
   row: number;
-  error: string;
+  name: string;
+  email: string;
+  industry?: string | null;
+  stage?: string | null;
+  status?: string | null;
+  handledBy?: string | null;
+  rowStatus: "Valid" | "Error" | "Duplicate";
+  error?: string | null;
 }
 
 export interface BulkUploadResult {
   totalRows: number;
+  validRows: number;
   inserted: number;
-  failed: number;
-  errors: BulkRowError[];
+  errorRows: number;
+  duplicateRows: number;
+  dryRun: boolean;
+  rows: BulkRowPreview[];
 }
 
 export interface NotificationRow {
@@ -191,7 +248,7 @@ export const isFinalStatus = (s: Status) => s === "Won" || s === "Lost" || s ===
 /** Permission matrix shape shared with the API. */
 export type PermissionMatrix = Record<string, Record<string, boolean>>;
 
-/** Display names for the editable permission actions (BRDID01 Role Master). */
+/** Display names for the editable ACTION permissions (BRDID01 Role Master). */
 export const PERMISSION_LABELS: Record<string, string> = {
   ViewAllLeads: "View All Leads",
   OwnLeads: "Own / Handle Leads",
@@ -200,5 +257,31 @@ export const PERMISSION_LABELS: Record<string, string> = {
   BulkUpload: "Bulk Upload",
   Export: "Export",
   DeleteLead: "Delete/Inactive",
-  AddUser: "Add User"
+  AddUser: "Manage Users"
 };
+
+/** Display names for PAGE/MODULE access permissions (nav + route guards). */
+export const PAGE_PERMISSION_LABELS: Record<string, string> = {
+  PageDashboard: "Dashboard",
+  PageAskAI: "Ask AI",
+  PageLeads: "Leads",
+  PageCentralPool: "Central Pool",
+  PageBulkUpload: "Bulk Upload",
+  PageVisitorAnalytics: "Visitor Analytics",
+  PageUsersRoles: "Users & Roles"
+};
+
+/** Cells locked to ON so an Admin can never lock themselves out. */
+export const LOCKED_PERMISSIONS: [string, Role][] = [
+  ["AddUser", "Admin"],
+  ["PageUsersRoles", "Admin"]
+];
+
+export interface UpdateUserPayload {
+  fullName: string;
+  role: Role;
+  managerId?: number | null;
+  isActive: boolean;
+  newPassword?: string | null;
+  adId?: string | null;
+}

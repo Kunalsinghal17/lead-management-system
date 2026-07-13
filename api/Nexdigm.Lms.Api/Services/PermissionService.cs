@@ -19,9 +19,20 @@ public static class PermissionActions
     public const string DeleteLead = "DeleteLead";
     public const string AddUser = "AddUser";
 
+    // Page/module access — controls which pages a role can open (nav + route guards).
+    public const string PageDashboard = "PageDashboard";
+    public const string PageAskAI = "PageAskAI";
+    public const string PageLeads = "PageLeads";
+    public const string PageCentralPool = "PageCentralPool";
+    public const string PageBulkUpload = "PageBulkUpload";
+    public const string PageVisitorAnalytics = "PageVisitorAnalytics";
+    public const string PageUsersRoles = "PageUsersRoles";
+
     public static readonly string[] All =
     {
-        ViewAllLeads, OwnLeads, CreateLead, Reassign, BulkUpload, Export, DeleteLead, AddUser
+        ViewAllLeads, OwnLeads, CreateLead, Reassign, BulkUpload, Export, DeleteLead, AddUser,
+        PageDashboard, PageAskAI, PageLeads, PageCentralPool, PageBulkUpload,
+        PageVisitorAnalytics, PageUsersRoles
     };
 
     public static readonly IReadOnlyDictionary<string, string> DisplayNames =
@@ -34,7 +45,14 @@ public static class PermissionActions
             [BulkUpload] = "Bulk Upload",
             [Export] = "Export",
             [DeleteLead] = "Delete/Inactive",
-            [AddUser] = "Add User"
+            [AddUser] = "Manage Users",
+            [PageDashboard] = "Page: Dashboard",
+            [PageAskAI] = "Page: Ask AI",
+            [PageLeads] = "Page: Leads",
+            [PageCentralPool] = "Page: Central Pool",
+            [PageBulkUpload] = "Page: Bulk Upload",
+            [PageVisitorAnalytics] = "Page: Visitor Analytics",
+            [PageUsersRoles] = "Page: Users & Roles"
         };
 
     /// <summary>Default matrix — Role Master from the BRD + "leads are handled by Executives".</summary>
@@ -48,8 +66,20 @@ public static class PermissionActions
             [BulkUpload]   = D(admin: true, manager: true, executive: true, basic: false),
             [Export]       = D(admin: true, manager: true, executive: false, basic: false),
             [DeleteLead]   = D(admin: true, manager: false, executive: false, basic: false),
-            [AddUser]      = D(admin: true, manager: false, executive: false, basic: false)
+            [AddUser]      = D(admin: true, manager: false, executive: false, basic: false),
+
+            [PageDashboard]        = D(admin: true, manager: true, executive: true, basic: true),
+            [PageAskAI]            = D(admin: true, manager: true, executive: true, basic: true),
+            [PageLeads]            = D(admin: true, manager: true, executive: true, basic: true),
+            [PageCentralPool]      = D(admin: true, manager: true, executive: true, basic: true),
+            [PageBulkUpload]       = D(admin: true, manager: true, executive: true, basic: false),
+            [PageVisitorAnalytics] = D(admin: true, manager: true, executive: true, basic: false),
+            [PageUsersRoles]       = D(admin: true, manager: false, executive: false, basic: false)
         };
+
+    /// <summary>Permissions locked to true so an Admin can never lock themselves out.</summary>
+    public static bool IsLocked(string action, UserRole role) =>
+        role == UserRole.Admin && (action == AddUser || action == PageUsersRoles);
 
     private static IReadOnlyDictionary<UserRole, bool> D(bool admin, bool manager, bool executive, bool basic) =>
         new Dictionary<UserRole, bool>
@@ -128,7 +158,7 @@ public class PermissionService
             {
                 if (!Enum.TryParse<UserRole>(roleName, true, out var role)) continue;
                 var allowed = allowedRaw;
-                if (action == PermissionActions.AddUser && role == UserRole.Admin) allowed = true; // lockout guard
+                if (PermissionActions.IsLocked(action, role)) allowed = true; // lockout guard
 
                 var key = action + ":" + role;
                 var row = rows.FirstOrDefault(r => r.Value == key);

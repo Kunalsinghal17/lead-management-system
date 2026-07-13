@@ -101,14 +101,37 @@ To point a hosted frontend at a hosted API, set `VITE_API_URL` (see `.env.exampl
 | BRDID12 | Bulk upload — system template, structure/row/file validation, error report | Bulk Upload page, `ExcelService` (ClosedXML) |
 | BRDID13 | Visitor timestamping & visit count via API, exportable | Visitor Analytics page, `POST /api/visitors/ingest` |
 
-**Smart features (no external AI API — fully rule-based and deterministic):**
+**Smart features (no external AI API — fully rule-based and deterministic, zero token cost):**
 
 - **Ask AI** — natural-language questions over live pipeline data ("which leads need
   follow-up?", "lost reason analysis", "leads older than 5 days", "breakdown by source"...).
+  Also reachable from the header search and the Leads search bar ("ask in plain English").
 - **Lead scoring** — explainable conversion-likelihood score (email domain type, CTA
-  intent, industry, value, freshness, stage momentum) with stated reasons.
-- **Follow-up assistant** — drafts a personalized follow-up email from the lead's context
-  and day-wise notes; the user reviews, copies and sends.
+  intent, industry, value, freshness, stage momentum) with stated reasons and a
+  "How scoring works" explainer on the Leads page.
+- **Follow-up assistant** — next-best-action recommendation plus a personalized email
+  draft (Copy / Regenerate) built from the lead's context and day-wise notes.
+- **Suggest owner / Suggest classification** — one-click rule-based suggestions in the
+  lead panel (lightest-workload executive; signal-based Lead/Not-Lead hint).
+- **Dashboard insights** — wins / risks / recommended action generated from the live
+  summary, alongside the needs-attention drill-down panel, follow-up-adherence gauge
+  (vs the BRD's 90% target), classification donut and period-over-period KPI deltas.
+
+**Role-scoped visibility (from the demo call feedback):** every number a user sees is in
+their own context. If a role's "View All Leads" permission is switched off in Users &
+Roles, Executives see only their own leads and Managers see their team's (direct
+reports), across the lead list, dashboard, Ask AI and notifications. The central pool
+stays shared. Defaults follow the BRD (all roles see all); flip the toggle to restrict —
+no deployment needed.
+
+**Bulk upload (validate-first):** upload → full row-by-row preview (Valid / Error /
+Duplicate with reasons) → import only clean rows. Duplicate = same email already in LMS
+within `BulkUpload:DuplicateWindowDays` (default 7); older matches are treated as repeat
+business and allowed.
+
+**Visitor analytics:** daily new-vs-returning visits (7/30/90-day ranges),
+visit-frequency and time-on-site distributions, IP search — fed by per-visit events on
+the ingestion endpoint.
 
 **Security controls (per the BRD's implicit requirements):** no page renders without
 login; JWT validated on every API call (UI bypass is rejected server-side); passwords

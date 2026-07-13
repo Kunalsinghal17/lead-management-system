@@ -92,7 +92,7 @@ export function answerQuestion(q: string, leads: Lead[], summary: DashboardSumma
     return {
       title: "Central pool",
       text: poolLeads.length === 0
-        ? "The central pool is empty — every lead has an owner (BRDID04 in action)."
+        ? "The central pool is empty — every lead has an owner."
         : `${poolLeads.length} leads are waiting in the central pool without an owner. Every lead must have exactly one active handler — pick them up from the Central Pool page.`,
       table: poolLeads.length === 0 ? undefined : {
         headers: ["Lead", "Name", "Industry", "Source", "Age (days)"],
@@ -183,7 +183,7 @@ export function answerQuestion(q: string, leads: Lead[], summary: DashboardSumma
       text: aged.length === 0
         ? `No open leads are older than ${n} days. Aging is under control.`
         : `${aged.length} open leads have been sitting for more than ${n} days` +
-          (n >= 10 ? " — these are past the escalation threshold (BRDID10)." : "."),
+          (n >= 10 ? " — these are past the 10-day escalation threshold." : "."),
       table: aged.length === 0 ? undefined : {
         headers: ["Lead", "Name", "Owner", "Stage", "Age (days)"],
         rows: aged.slice(0, 15).map(l => [l.leadCode, l.name, l.assignedToName ?? "Unassigned", l.stage, l.ageDays])
@@ -200,7 +200,7 @@ export function answerQuestion(q: string, leads: Lead[], summary: DashboardSumma
     if (s.includes("lost")) return simpleCount("Lost leads", summary.lostLeads, summary, `${summary.lostLeads} leads were lost, worth ${formatInr(summary.lostValueInr)}.`);
     if (s.includes("not lead") || s.includes("notlead") || s.includes("junk")) {
       return simpleCount("Not-Lead enquiries", summary.closedNotLeads, summary,
-        `${summary.closedNotLeads} enquiries were classified as Not Lead and auto-closed by the system (BRDID05).`);
+        `${summary.closedNotLeads} enquiries were classified as Not Lead and auto-closed by the system.`);
     }
     return simpleCount("Total leads", summary.totalLeads, summary,
       `The system holds ${summary.totalLeads} qualified/active leads plus ${summary.closedNotLeads} Not-Lead enquiries.`);
@@ -229,6 +229,86 @@ export function answerQuestion(q: string, leads: Lead[], summary: DashboardSumma
       "Ask me about leads, the central pool, follow-ups, conversion, pipeline value, lost reasons, sources, industries, owners or visitors. A few things to try:",
     chips: DEFAULT_CHIPS
   };
+}
+
+// ------------------------------------------------------------------ insights
+
+export interface Insight {
+  kind: "win" | "risk";
+  metric: string;
+  text: string;
+  severity?: "critical" | "watch";
+}
+
+export interface InsightsReport {
+  headline: string;
+  wins: Insight[];
+  risks: Insight[];
+  recommendedAction: string;
+}
+
+/**
+ * Rule-based dashboard insights — wins, risks and a recommended action derived
+ * deterministically from the live summary. No external AI service.
+ */
+export function generateInsights(summary: DashboardSummary): InsightsReport {
+  const wins: Insight[] = [];
+  const risks: Insight[] = [];
+  const d = summary.deltas;
+
+  if (d.pipelineValuePct > 20)
+    wins.push({ kind: "win", metric: formatInr(summary.pipelineValueInr),
+      text: `Pipeline value grew ${d.pipelineValuePct}% vs the prior period — top of funnel is expanding.` });
+  if (d.totalLeadsPct > 15)
+    wins.push({ kind: "win", metric: String(summary.totalLeads),
+      text: `Lead inflow is up ${d.totalLeadsPct}% — enquiry capture is working.` });
+  if (d.wonValuePct > 10)
+    wins.push({ kind: "win", metric: formatInr(summary.wonValueInr),
+      text: `Won value up ${d.wonValuePct}% period-over-period.` });
+  if (summary.adherencePct >= 90)
+    wins.push({ kind: "win", metric: `${summary.adherencePct}%`,
+      text: "Follow-up adherence is at or above the 90% target — discipline is holding." });
+  if (wins.length === 0)
+    wins.push({ kind: "win", metric: `${summary.openLeads}`,
+      text: `${summary.openLeads} open leads worth ${formatInr(summary.pipelineValueInr)} are actively in play.` });
+
+  const na = summary.needsAttention;
+  if (na.escalated > 0)
+    risks.push({ kind: "risk", metric: String(na.escalated), severity: "critical",
+      text: `${na.escalated} escalated leads open beyond 10 days — a backlog that directly threatens win rates.` });
+  if (summary.adherencePct < 90)
+    risks.push({ kind: "risk", metric: `${summary.adherencePct}%`, severity: "watch",
+      text: `Follow-up adherence at ${summary.adherencePct}% vs the 90% target — risking pipeline leakage.` });
+  if (d.conversionPts < 0)
+    risks.push({ kind: "risk", metric: `${d.conversionPts} pts`, severity: "watch",
+      text: `Conversion dipped ${Math.abs(d.conversionPts)} points — volume is not yet yielding proportional wins.` });
+  if (na.unassigned > 0)
+    risks.push({ kind: "risk", metric: String(na.unassigned), severity: "watch",
+      text: `${na.unassigned} leads are waiting in the central pool without an owner.` });
+  if (summary.lostLeads === 0 && summary.totalLeads > 10)
+    risks.push({ kind: "risk", metric: "0", severity: "watch",
+      text: "No recorded losses — unusual; worth verifying losses are being tracked honestly." });
+
+  let action: string;
+  if (na.escalated > 0)
+    action = `Immediately clear the ${na.escalated} escalated leads over 10 days old` +
+      (summary.adherencePct < 90 ? `, and coach the team to lift follow-up adherence from ${summary.adherencePct}% toward 90%` : "") +
+      " to capitalize on the current pipeline.";
+  else if (na.unassigned > 0)
+    action = `Assign the ${na.unassigned} pool leads today — fast first response is the single biggest conversion lever.`;
+  else if (summary.adherencePct < 90)
+    action = `Focus this week on day-wise follow-up discipline (currently ${summary.adherencePct}%, target 90%).`;
+  else
+    action = "Pipeline hygiene looks healthy — push Proposal-stage leads toward closure.";
+
+  const headline =
+    d.pipelineValuePct > 20 && (summary.adherencePct < 90 || d.conversionPts < 0)
+      ? `Pipeline value surged ${d.pipelineValuePct}% with lead volumes up, but ${summary.adherencePct < 90 ? "follow-up adherence" : "conversion"} fell short this period.`
+      : d.totalLeadsPct > 0
+        ? `Lead inflow up ${d.totalLeadsPct}% with ${formatInr(summary.pipelineValueInr)} open pipeline; conversion at ${summary.conversionRatePct}%.`
+        : `${summary.openLeads} open leads worth ${formatInr(summary.pipelineValueInr)}; conversion at ${summary.conversionRatePct}%.`;
+
+  return { headline, wins: wins.slice(0, 3), risks: risks.slice(0, 3), recommendedAction: action };
 }
 
 // ------------------------------------------------------------------ helpers
@@ -263,7 +343,7 @@ function parseBreakdown(s: string, real: Lead[], summary: DashboardSummary): Nlq
   if (s.includes("source")) {
     return {
       title: "Leads by source",
-      text: "Where leads are coming from — website auto-ingestion (BRDID02), manual creation and bulk upload (BRDID12):",
+      text: "Where leads are coming from — website auto-ingestion, manual creation and bulk upload:",
       chart: { kind: "bar", data: summary.bySource },
       chips: ["Breakdown by stage", "Breakdown by industry", "Give me an overview of how we are doing right now"]
     };
@@ -285,7 +365,7 @@ function parseBreakdown(s: string, real: Lead[], summary: DashboardSummary): Nlq
     const data = [...map.entries()].map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
     return {
       title: "Leads by owner",
-      text: "Lead ownership across the team (every lead has exactly one active handler — BRDID04):",
+      text: "Lead ownership across the team (every lead has exactly one active handler):",
       chart: { kind: "bar", data },
       chips: ["Which leads need follow-up?", "Show unassigned leads", "Breakdown by stage"]
     };
@@ -293,7 +373,7 @@ function parseBreakdown(s: string, real: Lead[], summary: DashboardSummary): Nlq
   // default breakdown → stage
   return {
     title: "Leads by lifecycle stage",
-    text: "Pipeline distribution across the strict Enquiry → Lead → Proposal → Won/Lost lifecycle (BRDID07):",
+    text: "Pipeline distribution across the strict Enquiry → Lead → Proposal → Won/Lost lifecycle:",
     chart: { kind: "bar", data: summary.byStage },
     chips: ["Breakdown by source", "Breakdown by industry", "Breakdown by owner"]
   };

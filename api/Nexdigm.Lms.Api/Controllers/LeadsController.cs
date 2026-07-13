@@ -46,9 +46,10 @@ public class LeadsController : ControllerBase
             .Include(l => l.DayUpdates)
             .Where(l => l.IsActive);
 
-        // Roles without "View All Leads" only ever see their own leads.
-        if (!await _permissions.IsAllowedAsync(User.GetRole(), PermissionActions.ViewAllLeads, ct))
-            q = q.Where(l => l.AssignedToUserId == userId);
+        // Role-based visibility: all / team (manager) / own (see DataScope).
+        // The central pool stays visible to everyone — unowned leads are common property.
+        if (view.ToLowerInvariant() != "pool")
+            (q, _) = await DataScope.ApplyAsync(q, _db, _permissions, userId, User.GetRole(), ct);
 
         switch (view.ToLowerInvariant())
         {

@@ -10,7 +10,7 @@ import * as mock from "./mock";
 import {
   BulkUploadResult, CreateLeadPayload, DashboardSummary, Lead, LeadFilters,
   Masters, NotificationRow, PermissionMatrix, Role, SessionUser,
-  UpdateLeadPayload, UserRow, VisitorStat
+  UpdateLeadPayload, UpdateUserPayload, UserRow, VisitorAnalytics, VisitorStat
 } from "./types";
 
 const BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "";
@@ -221,7 +221,10 @@ export const api = {
   },
 
   async dashboard(days = 30): Promise<DashboardSummary> {
-    if ((await apiMode()) === "mock") return wrapMock(() => mock.mockDashboard(days));
+    if ((await apiMode()) === "mock") {
+      const u = me();
+      return wrapMock(() => mock.mockDashboard(days, u.id, u.role));
+    }
     return http<DashboardSummary>(`/api/dashboard/summary?days=${days}`);
   },
 
@@ -265,6 +268,15 @@ export const api = {
     return user;
   },
 
+  /** Edit an existing user — role, manager, active status, optional password reset. */
+  async updateUser(id: number, payload: UpdateUserPayload): Promise<UserRow> {
+    const user = (await apiMode()) === "mock"
+      ? wrapMock(() => mock.mockUpdateUser(id, payload))
+      : await http<UserRow>(`/api/users/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+    notifyDataChanged();
+    return user;
+  },
+
   /** Preview mode only — clears saved demo data and reloads with a fresh seed. */
   async resetDemoData(): Promise<void> {
     if ((await apiMode()) === "mock") {
@@ -278,6 +290,11 @@ export const api = {
     return http<VisitorStat[]>("/api/visitors");
   },
 
+  async visitorAnalytics(days = 30): Promise<VisitorAnalytics> {
+    if ((await apiMode()) === "mock") return wrapMock(() => mock.mockVisitorAnalytics(days));
+    return http<VisitorAnalytics>(`/api/visitors/analytics?days=${days}`);
+  },
+
   async exportVisitors(): Promise<void> {
     if ((await apiMode()) === "mock") {
       downloadBlob(mock.mockExportVisitorsCsv(), `nexdigm-visitor-analytics-${Date.now()}.csv`);
@@ -289,7 +306,10 @@ export const api = {
   },
 
   async notifications(): Promise<NotificationRow[]> {
-    if ((await apiMode()) === "mock") return wrapMock(() => mock.mockNotifications());
+    if ((await apiMode()) === "mock") {
+      const u = me();
+      return wrapMock(() => mock.mockNotifications(u.id, u.role));
+    }
     return http<NotificationRow[]>("/api/notifications");
   },
 
@@ -321,25 +341,26 @@ export const api = {
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   },
 
-  async bulkUpload(file: File): Promise<BulkUploadResult> {
+  /** Two-step bulk upload: dryRun=true → validation preview; dryRun=false → import valid rows. */
+  async bulkUpload(file: File, dryRun: boolean): Promise<BulkUploadResult> {
     if ((await apiMode()) === "mock") {
       if (!file.name.toLowerCase().endsWith(".csv"))
         throw new ApiError("Preview mode accepts the .csv template (the live system accepts .xlsx).", 400);
       const text = await file.text();
-      const res = wrapMock(() => mock.mockBulkUpload(text));
-      notifyDataChanged();
+      const res = wrapMock(() => mock.mockBulkUpload(text, dryRun));
+      if (!dryRun) notifyDataChanged();
       return res;
     }
     const form = new FormData();
     form.append("file", file);
-    const res = await fetch(`${BASE}/api/bulk-upload`, {
+    const res = await fetch(`${BASE}/api/bulk-upload?dryRun=${dryRun}`, {
       method: "POST",
       headers: authHeaders(),
       body: form
     });
     const body = await res.json();
     if (!res.ok) throw new ApiError(body?.message ?? "Upload failed.", res.status);
-    notifyDataChanged();
+    if (!dryRun) notifyDataChanged();
     return body as BulkUploadResult;
   }
 };

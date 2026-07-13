@@ -27,7 +27,17 @@ public record CreateUserRequest(
     string Email,
     string Password,
     string Role,
-    int? ManagerId);
+    int? ManagerId,
+    string? AdId);
+
+/// <summary>Edit an existing user. NewPassword is optional (leave null to keep current).</summary>
+public record UpdateUserRequest(
+    string FullName,
+    string Role,
+    int? ManagerId,
+    bool IsActive,
+    string? NewPassword,
+    string? AdId);
 
 // ---------- Leads ----------
 public record DayUpdateDto(int DayNumber, string Note, DateTime? UpdatedAtUtc, string? UpdatedBy);
@@ -123,18 +133,61 @@ public record VisitorStatDto(
 
 public record IngestVisitRequest(string IpAddress, int TimeSpentSeconds, DateTime? VisitAt);
 
+public record DailyVisits(string Date, int NewVisitors, int ReturningVisitors);
+public record DistributionBucket(string Name, int Value, double Pct);
+
+public record VisitorAnalytics(
+    int TotalVisits,
+    int UniqueVisitors,
+    int ReturningVisitors,
+    int AvgTimeSeconds,
+    int PeakDayVisits,
+    double AvgVisitsPerDay,
+    List<DailyVisits> Daily,
+    List<DistributionBucket> Frequency,
+    List<DistributionBucket> TimeOnSite);
+
 // ---------- Bulk upload (BRDID12) ----------
-public record BulkRowError(int Row, string Error);
+/// <summary>Row-level preview: RowStatus = Valid | Error | Duplicate.</summary>
+public record BulkRowPreview(
+    int Row,
+    string Name,
+    string Email,
+    string? Industry,
+    string? Stage,
+    string? Status,
+    string? HandledBy,
+    string RowStatus,
+    string? Error);
 
 public record BulkUploadResult(
     int TotalRows,
+    int ValidRows,
     int Inserted,
-    int Failed,
-    List<BulkRowError> Errors);
+    int ErrorRows,
+    int DuplicateRows,
+    bool DryRun,
+    List<BulkRowPreview> Rows);
 
 // ---------- Dashboard ----------
 public record TrendPoint(string Date, int Count);
 public record NameValue(string Name, decimal Value);
+
+/// <summary>Actionable backlog counts (drill-down targets on the dashboard).</summary>
+public record NeedsAttention(
+    int Escalated,
+    int MissingUpdates,
+    int Aging,
+    int Unassigned,
+    int Unclassified);
+
+/// <summary>Change vs the previous period of the same length.</summary>
+public record PeriodDeltas(
+    double TotalLeadsPct,
+    double WonPct,
+    double ConversionPts,
+    double PipelineValuePct,
+    double WonValuePct);
 
 public record DashboardSummary(
     int TotalLeads,
@@ -151,7 +204,13 @@ public record DashboardSummary(
     List<NameValue> BySource,
     List<NameValue> ByStage,
     List<NameValue> ByIndustry,
-    List<NameValue> LostReasons);
+    List<NameValue> LostReasons,
+    NeedsAttention NeedsAttention,
+    double AdherencePct,
+    int AdherenceOnTrack,
+    int AdherenceMissed,
+    PeriodDeltas Deltas,
+    string Scope);
 
 // ---------- Masters ----------
 public record MastersDto(

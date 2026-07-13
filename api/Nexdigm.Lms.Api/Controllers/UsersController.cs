@@ -71,7 +71,8 @@ public class UsersController : ControllerBase
             Email = email,
             PasswordHash = PasswordHasher.Hash(req.Password),
             Role = role,
-            ManagerId = req.ManagerId
+            ManagerId = req.ManagerId,
+            AdId = string.IsNullOrWhiteSpace(req.AdId) ? null : req.AdId.Trim()
         };
         _db.Users.Add(user);
         await _db.SaveChangesAsync(ct);
@@ -80,13 +81,70 @@ public class UsersController : ControllerBase
             user.ManagerId, null, user.IsActive);
     }
 
-    /// <summary>Deactivate a user — "Add User" (user management) permission.</summary>
+    /// <summary>
+    /// Edit a user — role, reporting manager, active status, optional password reset.
+    /// Guard: the last active Admin can never be demoted or deactivated.
+    /// </summary>
+    [HttpPut("{id:int}")]
+    public async Task<ActionResult<UserDto>> Update(int id, [FromBody] UpdateUserRequest req, CancellationToken ct)
+    {
+        await _permissions.EnsureAsync(User.GetRole(), PermissionActions.AddUser, ct);
+
+        var user = await _db.Users.Include(u => u.Manager).FirstOrDefaultAsync(u => u.Id == id, ct);
+        if (user is null) return NotFound();
+
+        if (string.IsNullOrWhiteSpace(req.FullName))
+            return BadRequest(new { message = "Full name is required." });
+        if (!Enum.TryParse<UserRole>(req.Role, true, out var role))
+            return BadRequest(new { message = "Role must be Admin, Manager, Executive or Basic." });
+        if (req.ManagerId == id)
+            return BadRequest(new { message = "A user cannot report to themselves." });
+        if (!string.IsNullOrEmpty(req.NewPassword) && req.NewPassword.Length < 8)
+            return BadRequest(new { message = "New password must be at least 8 characters." });
+
+        // Lockout guard — keep at least one active Admin at all times
+        var losesAdmin = user.Role == UserRole.Admin && (role != UserRole.Admin || !req.IsActive);
+        if (losesAdmin)
+        {
+            var otherAdmins = await _db.Users.CountAsync(
+                u => u.Id != id && u.Role == UserRole.Admin && u.IsActive, ct);
+            if (otherAdmins == 0)
+                return BadRequest(new { message = "This is the last active Admin — assign another Admin first." });
+        }
+
+        user.FullName = req.FullName.Trim();
+        user.Role = role;
+        user.ManagerId = req.ManagerId;
+        user.IsActive = req.IsActive;
+        user.AdId = string.IsNullOrWhiteSpace(req.AdId) ? null : req.AdId.Trim();
+        if (!string.IsNullOrEmpty(req.NewPassword))
+            user.PasswordHash = PasswordHasher.Hash(req.NewPassword);
+
+        await _db.SaveChangesAsync(ct);
+
+        var manager = req.ManagerId.HasValue
+            ? await _db.Users.FindAsync(new object[] { req.ManagerId.Value }, ct)
+            : null;
+        return new UserDto(user.Id, user.FullName, user.Email, user.Role.ToString(),
+            user.ManagerId, manager?.FullName, user.IsActive);
+    }
+
+    /// <summary>Deactivate a user — "Manage Users" permission. The last active Admin is protected.</summary>
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Deactivate(int id, CancellationToken ct)
     {
         await _permissions.EnsureAsync(User.GetRole(), PermissionActions.AddUser, ct);
         var user = await _db.Users.FindAsync(new object[] { id }, ct);
         if (user is null) return NotFound();
+
+        if (user.Role == UserRole.Admin && user.IsActive)
+        {
+            var otherAdmins = await _db.Users.CountAsync(
+                u => u.Id != id && u.Role == UserRole.Admin && u.IsActive, ct);
+            if (otherAdmins == 0)
+                return BadRequest(new { message = "This is the last active Admin — assign another Admin first." });
+        }
+
         user.IsActive = false;
         await _db.SaveChangesAsync(ct);
         return NoContent();

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Download, Plus, Search } from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { ChevronLeft, ChevronRight, Download, Info, Plus, Search, Sparkles, X } from "lucide-react";
 import { api } from "../lib/api";
 import { Lead, LeadFilters, Masters, UserRow } from "../lib/types";
 import { formatInr, ageLabel } from "../lib/format";
@@ -9,10 +10,20 @@ import { scoreLead } from "../lib/scoring";
 import { useAuth } from "../lib/auth";
 
 type Tab = "all" | "my" | "notlead";
+type Preset = "escalated" | "aging" | "missing" | "unclassified" | null;
+
+const PRESET_LABELS: Record<Exclude<Preset, null>, string> = {
+  escalated: "Escalated — open > 10 days",
+  aging: "Aging — open 6–10 days",
+  missing: "Missing today's day-wise update",
+  unclassified: "Unclassified enquiries"
+};
 
 /** BRDID11 — Lead Tracker: the master view of every lead. */
 export default function Leads() {
   const { can } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [tab, setTab] = useState<Tab>("all");
   const [leads, setLeads] = useState<Lead[]>([]);
   const [masters, setMasters] = useState<Masters | null>(null);
@@ -23,8 +34,14 @@ export default function Leads() {
   const [industry, setIndustry] = useState("");
   const [ownerId, setOwnerId] = useState("");
   const [source, setSource] = useState("");
+  const [preset, setPreset] = useState<Preset>(
+    ((location.state as { preset?: string } | null)?.preset as Preset) ?? null
+  );
   const [openLead, setOpenLead] = useState<number | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [showScoringInfo, setShowScoringInfo] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [loading, setLoading] = useState(true);
 
   const filters: LeadFilters = useMemo(() => ({
@@ -58,6 +75,54 @@ export default function Leads() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
 
+  useEffect(() => { setPage(1); }, [filters, preset, pageSize]);
+
+  // Preset drill-downs from the dashboard's "Needs attention" panel
+  const presetFiltered = useMemo(() => {
+    if (!preset) return leads;
+    const currentDay = (l: Lead) => {
+      if (!l.assignedAtUtc) return 0;
+      const a = new Date(l.assignedAtUtc); const now = new Date();
+      const days = Math.max(0, Math.round(
+        (new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() -
+         new Date(a.getFullYear(), a.getMonth(), a.getDate()).getTime()) / 86400000));
+      return Math.min(5, days + 1);
+    };
+    switch (preset) {
+      case "escalated": return leads.filter(l => l.status === "Open" && l.ageDays > 10);
+      case "aging": return leads.filter(l => l.status === "Open" && l.ageDays > 5 && l.ageDays <= 10);
+      case "missing": return leads.filter(l =>
+        l.status === "Open" && l.enquiryType === "Lead" && l.assignedToUserId !== null &&
+        currentDay(l) >= 1 && !l.dayUpdates.some(d => d.dayNumber === currentDay(l)));
+      case "unclassified": return leads.filter(l => l.enquiryType === "Unclassified" && l.status === "Open");
+      default: return leads;
+    }
+  }, [leads, preset]);
+
+  // Summary strip (computed on the unpaginated, unfiltered-by-preset list)
+  const strip = useMemo(() => {
+    const real = leads.filter(l => l.enquiryType !== "NotLead");
+    const won = real.filter(l => l.status === "Won").length;
+    const lost = real.filter(l => l.status === "Lost").length;
+    return {
+      leads: real.length,
+      notLead: leads.filter(l => l.enquiryType === "NotLead").length,
+      open: real.filter(l => l.status === "Open").length,
+      closed: real.filter(l => l.status !== "Open").length + leads.filter(l => l.enquiryType === "NotLead").length,
+      won, lost,
+      winRate: won + lost === 0 ? null : Math.round((100 * won) / (won + lost)),
+      overdue: real.filter(l => l.status === "Open" && l.ageDays > 10).length
+    };
+  }, [leads]);
+
+  const totalPages = Math.max(1, Math.ceil(presetFiltered.length / pageSize));
+  const pageRows = presetFiltered.slice((page - 1) * pageSize, page * pageSize);
+
+  const askAi = () => {
+    if (search.trim()) navigate("/ask-ai", { state: { q: search.trim() } });
+    else navigate("/ask-ai");
+  };
+
   const select = "rounded-md border border-[#CAC8C7] px-2 py-1.5 text-xs outline-none focus:border-[#645BA8]";
 
   return (
@@ -89,6 +154,47 @@ export default function Leads() {
         </div>
       </div>
 
+      {/* Summary strip */}
+      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div className="rounded-lg border border-[#DFDDDD] p-3">
+          <div className="text-[10px] font-bold uppercase tracking-wide text-[#808081]">Leads & Not Lead</div>
+          <div className="mt-1 flex items-end gap-3">
+            <span><span className="text-xl font-bold text-[#333333]">{strip.leads}</span>
+              <span className="ml-1 text-[10px] text-[#808081]">leads</span></span>
+            <span><span className="text-xl font-bold text-[#808081]">{strip.notLead}</span>
+              <span className="ml-1 text-[10px] text-[#808081]">not lead</span></span>
+          </div>
+        </div>
+        <div className="rounded-lg border border-[#DFDDDD] p-3">
+          <div className="text-[10px] font-bold uppercase tracking-wide text-[#808081]">Open & Closed</div>
+          <div className="mt-1 flex items-end gap-3">
+            <span><span className="text-xl font-bold text-[#BC852C]">{strip.open}</span>
+              <span className="ml-1 text-[10px] text-[#808081]">open</span></span>
+            <span><span className="text-xl font-bold text-[#333333]">{strip.closed}</span>
+              <span className="ml-1 text-[10px] text-[#808081]">settled</span></span>
+          </div>
+        </div>
+        <div className="rounded-lg border border-[#DFDDDD] p-3">
+          <div className="text-[10px] font-bold uppercase tracking-wide text-[#808081]">Won & Lost</div>
+          <div className="mt-1 flex items-end gap-3">
+            <span><span className="text-xl font-bold text-[#2D7D3E]">{strip.won}</span>
+              <span className="ml-1 text-[10px] text-[#808081]">won</span></span>
+            <span><span className="text-xl font-bold text-[#712B69]">{strip.lost}</span>
+              <span className="ml-1 text-[10px] text-[#808081]">lost</span></span>
+            {strip.winRate !== null && (
+              <span className="text-[10px] text-[#808081]">{strip.winRate}% win rate</span>
+            )}
+          </div>
+        </div>
+        <div className="rounded-lg border border-[#DFDDDD] p-3">
+          <div className="text-[10px] font-bold uppercase tracking-wide text-[#808081]">Overdue</div>
+          <div className="mt-1">
+            <span className="text-xl font-bold" style={{ color: strip.overdue > 0 ? "#712B69" : "#2D7D3E" }}>{strip.overdue}</span>
+            <span className="ml-1 text-[10px] text-[#808081]">open more than 10 days</span>
+          </div>
+        </div>
+      </div>
+
       {/* Tabs */}
       <div className="mb-4 flex gap-1 border-b border-[#DFDDDD]">
         {([["all", "All Leads"], ["my", "My Leads"], ["notlead", "Not Lead Pool"]] as [Tab, string][]).map(([key, label]) => (
@@ -106,16 +212,34 @@ export default function Leads() {
         ))}
       </div>
 
+      {/* Preset chip (drill-down from dashboard) */}
+      {preset && (
+        <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-[#C6BDDD] bg-opacity-30 px-3 py-1 text-xs font-bold text-[#2C2561]">
+          Filter: {PRESET_LABELS[preset]}
+          <button onClick={() => setPreset(null)} aria-label="Clear preset filter" className="rounded-full p-0.5 hover:bg-white">
+            <X size={12} />
+          </button>
+        </div>
+      )}
+
       {/* Filters */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <div className="relative">
-          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#808081]" />
+        <div className="relative flex items-center">
+          <Search size={14} className="absolute left-2.5 text-[#808081]" />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search name, email, lead ID, report…"
-            className="w-64 rounded-md border border-[#CAC8C7] py-1.5 pl-8 pr-3 text-xs outline-none focus:border-[#645BA8]"
+            onKeyDown={e => { if (e.key === "Enter" && search.trim().split(/\s+/).length > 2) askAi(); }}
+            placeholder="Search, or ask in plain English…"
+            className="w-72 rounded-md border border-[#CAC8C7] py-1.5 pl-8 pr-16 text-xs outline-none focus:border-[#645BA8]"
           />
+          <button
+            onClick={askAi}
+            title="Answer this question with Ask AI"
+            className="absolute right-1.5 flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-bold text-[#645BA8] hover:bg-[#C6BDDD] hover:bg-opacity-30"
+          >
+            <Sparkles size={10} /> Ask AI
+          </button>
         </div>
         <select className={select} value={stage} onChange={e => setStage(e.target.value)}>
           <option value="">Stage — all</option>
@@ -139,7 +263,37 @@ export default function Leads() {
           <option value="Manual">Manual</option>
           <option value="BulkUpload">Bulk Upload</option>
         </select>
+        <button
+          onClick={() => setShowScoringInfo(s => !s)}
+          className="ml-auto flex items-center gap-1 text-[11px] font-bold text-[#808081] hover:text-[#645BA8]"
+        >
+          <Info size={12} /> How scoring works
+        </button>
       </div>
+
+      {showScoringInfo && (
+        <div className="mb-4 rounded-lg border border-[#C6BDDD] bg-[#C6BDDD] bg-opacity-10 p-4 text-xs text-[#333333]">
+          <div className="mb-1 font-bold">How lead scoring works</div>
+          <p className="mb-2 text-[#808081]">
+            A deterministic rule engine rates each open lead's conversion likelihood from signals
+            already on the lead — no external AI service, recomputed instantly whenever a lead changes.
+          </p>
+          <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2">
+            <span><b>Email type</b> — company domains convert better than personal (gmail/yahoo…)</span>
+            <span><b>CTA intent</b> — sample/contact requests beat a passive download</span>
+            <span><b>Industry fit</b> — research-buying sectors (BFSI, Pharma, Healthcare, Tech) score higher</span>
+            <span><b>Deal value</b> — a known, higher value raises the score</span>
+            <span><b>Freshness</b> — new enquiries score up; leads aging past 10 days score down</span>
+            <span><b>Momentum</b> — Proposal stage and consistent day-wise follow-ups add points</span>
+          </div>
+          <p className="mt-2 text-[#808081]">
+            Bands: <b style={{ color: "#712B69" }}>Hot</b> — work it now ·{" "}
+            <b style={{ color: "#BC852C" }}>Warm</b> — worth pursuing ·{" "}
+            <b style={{ color: "#467082" }}>Cool</b> — low priority. Only Open leads are scored.
+            Every score comes with its stated reasons in the lead panel.
+          </p>
+        </div>
+      )}
 
       {/* Table */}
       <div className="overflow-x-auto rounded-lg border border-[#DFDDDD]">
@@ -161,14 +315,14 @@ export default function Leads() {
           <tbody>
             {loading ? (
               <tr><td colSpan={10} className="px-4 py-10 text-center text-[#808081]">Loading leads…</td></tr>
-            ) : leads.length === 0 ? (
+            ) : pageRows.length === 0 ? (
               <tr>
                 <td colSpan={10} className="px-4 py-10 text-center text-[#808081]">
                   No leads match these filters. Adjust the filters or create a lead to get started.
                 </td>
               </tr>
             ) : (
-              leads.map(l => {
+              pageRows.map(l => {
                 const sc = scoreLead(l);
                 return (
                   <tr
@@ -205,7 +359,39 @@ export default function Leads() {
           </tbody>
         </table>
       </div>
-      <div className="mt-2 text-xs text-[#808081]">Showing {leads.length} leads</div>
+      {/* Pagination */}
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-[#808081]">
+        <span>
+          Showing {presetFiltered.length === 0 ? 0 : (page - 1) * pageSize + 1}–{Math.min(page * pageSize, presetFiltered.length)} of {presetFiltered.length} leads
+        </span>
+        <div className="flex items-center gap-2">
+          <span>Rows per page</span>
+          <select
+            className="rounded-md border border-[#CAC8C7] px-1.5 py-1 text-xs outline-none focus:border-[#645BA8]"
+            value={pageSize}
+            onChange={e => setPageSize(Number(e.target.value))}
+          >
+            {[10, 25, 50].map(n => <option key={n} value={n}>{n}</option>)}
+          </select>
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page <= 1}
+            className="rounded border border-[#CAC8C7] p-1 disabled:opacity-40"
+            aria-label="Previous page"
+          >
+            <ChevronLeft size={13} />
+          </button>
+          <span>Page {page} of {totalPages}</span>
+          <button
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            disabled={page >= totalPages}
+            className="rounded border border-[#CAC8C7] p-1 disabled:opacity-40"
+            aria-label="Next page"
+          >
+            <ChevronRight size={13} />
+          </button>
+        </div>
+      </div>
 
       {openLead !== null && masters && (
         <LeadDrawer
@@ -278,7 +464,7 @@ function CreateLeadModal({ masters, onClose, onCreated }: {
       <form onSubmit={submit} className="relative z-10 w-full max-w-lg rounded-lg bg-white p-6 shadow-2xl">
         <h2 className="text-lg font-bold text-[#333333]">Create lead</h2>
         <p className="mb-4 text-xs text-[#808081]">
-          Manual creation follows the same schema and defaults as auto-ingested leads (BRDID03).
+          Manual creation follows the same schema and defaults as auto-ingested leads.
           New leads start unassigned in the central pool.
         </p>
 

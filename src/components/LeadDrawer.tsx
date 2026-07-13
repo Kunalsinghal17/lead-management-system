@@ -3,8 +3,8 @@ import { X, Sparkles, Copy, Check, Trash2, Lock } from "lucide-react";
 import { Lead, Masters, NEXT_STAGES, Stage, UserRow, isFinalStatus } from "../lib/types";
 import { api, ApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { formatDateTime, formatInrFull } from "../lib/format";
-import { scoreLead, draftFollowUpEmail } from "../lib/scoring";
+import { formatDate, formatDateTime, formatInrFull } from "../lib/format";
+import { scoreLead, draftFollowUpEmail, nextBestAction } from "../lib/scoring";
 import { MailTypeBadge, ScorePill, StageBadge, StatusBadge } from "./Badges";
 
 interface Props {
@@ -34,7 +34,9 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
   const [remarks, setRemarks] = useState("");
   const [dayNotes, setDayNotes] = useState<Record<number, string>>({});
   const [draft, setDraft] = useState<{ subject: string; body: string } | null>(null);
+  const [draftVariant, setDraftVariant] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [suggestion, setSuggestion] = useState<string | null>(null);
 
   const load = async () => {
     const l = await api.getLead(leadId);
@@ -97,7 +99,7 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
 
     // BRDID09 client-side guard (server enforces too)
     if (showLostReason && !lostReason) {
-      setError("Lost Reason is mandatory when marking a lead as Lost (BRDID09).");
+      setError("Lost Reason is mandatory when marking a lead as Lost.");
       return;
     }
     if (showLostReason && lostReason === "Other" && !lostOther.trim()) {
@@ -168,7 +170,50 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
     }
   };
 
-  const makeDraft = () => lead && setDraft(draftFollowUpEmail(lead));
+  const makeDraft = () => lead && setDraft(draftFollowUpEmail(lead, draftVariant));
+
+  const regenerateDraft = () => {
+    if (!lead) return;
+    const next = draftVariant + 1;
+    setDraftVariant(next);
+    setDraft(draftFollowUpEmail(lead, next));
+  };
+
+  /** Rule-based owner suggestion: the executive with the fewest open leads. */
+  const suggestOwner = async () => {
+    const [pool, all] = await Promise.all([Promise.resolve(assignable), api.listLeads({})]);
+    if (pool.length === 0) return;
+    const load = new Map<number, number>(pool.map(u => [u.id, 0]));
+    for (const l of all) {
+      if (l.status === "Open" && l.assignedToUserId && load.has(l.assignedToUserId))
+        load.set(l.assignedToUserId, (load.get(l.assignedToUserId) ?? 0) + 1);
+    }
+    const best = [...load.entries()].sort((a, b) => a[1] - b[1])[0];
+    const user = pool.find(u => u.id === best[0])!;
+    setSuggestion(`Suggested owner: ${user.fullName} — lightest open workload (${best[1]} open). Assigning…`);
+    await assign(user.id);
+  };
+
+  /** Rule-based classification hint from the lead's own signals. */
+  const suggestClassification = () => {
+    if (!lead) return;
+    const details = `${lead.details ?? ""} ${lead.remarks ?? ""}`.toLowerCase();
+    const junk = ["student", "thesis", "assignment", "free", "college", "university project"];
+    const looksJunk = lead.mailType === "Personal" && junk.some(k => details.includes(k));
+    const strong = lead.mailType === "Professional" ||
+      (lead.cta ?? "").toLowerCase().includes("sample") ||
+      (lead.cta ?? "").toLowerCase().includes("contact");
+    if (looksJunk) {
+      setEnquiryType("NotLead");
+      setSuggestion("Suggestion: Not Lead — personal email plus student/free-info signals. Review and save.");
+    } else if (strong) {
+      setEnquiryType("Lead");
+      setSuggestion(`Suggestion: Lead — ${lead.mailType === "Professional" ? "professional email domain" : "buying-intent CTA"}. Review and save.`);
+    } else {
+      setEnquiryType("Lead");
+      setSuggestion("Suggestion: Lead (weak signals — personal email, passive CTA). Review before saving.");
+    }
+  };
 
   const copyDraft = async () => {
     if (!draft) return;
@@ -238,6 +283,15 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
             {error ?? notice}
           </div>
         )}
+        {suggestion && (
+          <div className="mt-3 flex items-start gap-2 rounded-md border border-[#C6BDDD] bg-[#C6BDDD] bg-opacity-15 px-3 py-2 text-xs text-[#2C2561]">
+            <Sparkles size={13} className="mt-0.5 shrink-0 text-[#C86AA9]" />
+            <span className="flex-1">{suggestion}</span>
+            <button onClick={() => setSuggestion(null)} className="text-[#808081] hover:text-[#333333]" aria-label="Dismiss">
+              <X size={13} />
+            </button>
+          </div>
+        )}
 
         {/* Score explanation */}
         {score && (
@@ -278,7 +332,7 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
         {!classified && (
           <div className="mb-3 rounded-md border border-[#C6BDDD] bg-[#C6BDDD] bg-opacity-20 px-3 py-2 text-xs text-[#2C2561]">
             Classify this enquiry as <b>Lead</b> or <b>Not Lead</b> before processing it — stage, status and
-            follow-ups unlock once it is classified (BRDID05).
+            follow-ups unlock once it is classified.
           </div>
         )}
         <div className="grid grid-cols-2 gap-3">
@@ -300,7 +354,16 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
               )}
             </select>
             {lead.assignedToUserId !== null && !elevated && (
-              <p className="mt-1 text-[11px] text-[#808081]">Re-assignment is Admin/Manager only (BRDID04).</p>
+              <p className="mt-1 text-[11px] text-[#808081]">Re-assignment is Admin/Manager only.</p>
+            )}
+            {lead.assignedToUserId === null && assignable.length > 0 && (
+              <button
+                onClick={suggestOwner}
+                disabled={busy}
+                className="mt-1.5 flex items-center gap-1 rounded-md border border-[#C6BDDD] px-2 py-1 text-[11px] font-bold text-[#645BA8] hover:bg-[#C6BDDD] hover:bg-opacity-20"
+              >
+                <Sparkles size={11} /> Suggest owner
+              </button>
             )}
           </div>
           <div>
@@ -319,6 +382,15 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
               <p className="mt-1 text-[11px] font-bold text-[#712B69]">
                 Saving will auto-close this enquiry (status → Closed).
               </p>
+            )}
+            {!classified && canEdit && (
+              <button
+                onClick={suggestClassification}
+                disabled={busy}
+                className="mt-1.5 flex items-center gap-1 rounded-md border border-[#C6BDDD] px-2 py-1 text-[11px] font-bold text-[#645BA8] hover:bg-[#C6BDDD] hover:bg-opacity-20"
+              >
+                <Sparkles size={11} /> Suggest classification
+              </button>
             )}
           </div>
           <div>
@@ -414,14 +486,43 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
             const prevFilled = d === 1 || lead.dayUpdates.some(u => u.dayNumber === d - 1);
             const editable =
               canEdit && lead.enquiryType === "Lead" && !finalized && prevFilled && lead.assignedToUserId !== null;
+
+            // Day date + state chip (Day 1 = assignment date)
+            let dayDate: Date | null = null;
+            let state: { label: string; bg: string; fg: string } | null = null;
+            if (lead.assignedAtUtc) {
+              dayDate = new Date(lead.assignedAtUtc);
+              dayDate.setDate(dayDate.getDate() + (d - 1));
+              const today = new Date();
+              const isToday = dayDate.toDateString() === today.toDateString();
+              const isPast = dayDate < today && !isToday;
+              state = existing
+                ? { label: "✓ Done", bg: "#C4E4C4", fg: "#1C4924" }
+                : isToday
+                  ? { label: "Due today", bg: "#FBE5C3", fg: "#725220" }
+                  : isPast
+                    ? (lead.enquiryType === "Lead" && !finalized
+                        ? { label: "Missed", bg: "#ECCAE0", fg: "#55204F" }
+                        : { label: "—", bg: "#DFDDDD", fg: "#333333" })
+                    : { label: "Upcoming", bg: "#DFDDDD", fg: "#333333" };
+            }
+
             return (
               <div key={d} className="rounded-md border border-[#DFDDDD] p-3">
                 <div className="mb-1.5 flex items-center justify-between">
-                  <span className="rounded bg-[#211C48] px-1.5 py-0.5 text-[10px] font-bold text-white">D{d}</span>
+                  <span className="flex items-center gap-2">
+                    <span className="rounded bg-[#211C48] px-1.5 py-0.5 text-[10px] font-bold text-white">D{d}</span>
+                    {dayDate && <span className="text-[11px] text-[#808081]">{formatDate(dayDate.toISOString())}</span>}
+                    {state && (
+                      <span className="rounded px-1.5 py-0.5 text-[10px] font-bold" style={{ backgroundColor: state.bg, color: state.fg }}>
+                        {state.label}
+                      </span>
+                    )}
+                  </span>
                   <span className="text-[11px] text-[#808081]">
                     {existing
                       ? `${existing.updatedBy ?? ""} · ${formatDateTime(existing.updatedAtUtc)}`
-                      : prevFilled ? (lead.enquiryType === "Lead" && !finalized ? "Due" : "—") : "Fill previous day first"}
+                      : prevFilled ? "" : "Fill previous day first"}
                   </span>
                 </div>
                 <div className="flex gap-2">
@@ -451,6 +552,10 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
         {lead.enquiryType === "Lead" && !finalized && (
           <>
             {sectionTitle("Follow-up assistant", "Template draft — you review & send")}
+            <div className="mb-3 flex items-start gap-2 rounded-md border border-[#D0E7DF] bg-[#D0E7DF] bg-opacity-30 px-3 py-2">
+              <span className="mt-0.5 shrink-0 text-[10px] font-bold uppercase tracking-wide text-[#217A62]">Next best action</span>
+              <span className="flex-1 text-xs text-[#333333]">{nextBestAction(lead)}</span>
+            </div>
             <div className="rounded-lg border border-[#C6BDDD] p-4">
               {!draft ? (
                 <div className="flex items-center justify-between gap-3">
@@ -470,14 +575,22 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
                 </div>
               ) : (
                 <div>
-                  <div className="mb-2 flex items-center justify-between">
+                  <div className="mb-2 flex items-center justify-between gap-2">
                     <span className="text-xs font-bold text-[#333333]">Subject: {draft.subject}</span>
-                    <button
-                      onClick={copyDraft}
-                      className="flex items-center gap-1 rounded border border-[#CAC8C7] px-2 py-1 text-[11px] font-bold text-[#333333] hover:bg-[#DFDDDD]"
-                    >
-                      {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? "Copied" : "Copy"}
-                    </button>
+                    <span className="flex shrink-0 gap-1.5">
+                      <button
+                        onClick={copyDraft}
+                        className="flex items-center gap-1 rounded border border-[#CAC8C7] px-2 py-1 text-[11px] font-bold text-[#333333] hover:bg-[#DFDDDD]"
+                      >
+                        {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? "Copied" : "Copy email"}
+                      </button>
+                      <button
+                        onClick={regenerateDraft}
+                        className="flex items-center gap-1 rounded border border-[#C6BDDD] px-2 py-1 text-[11px] font-bold text-[#645BA8] hover:bg-[#C6BDDD] hover:bg-opacity-20"
+                      >
+                        <Sparkles size={12} /> Regenerate
+                      </button>
+                    </span>
                   </div>
                   <pre className="whitespace-pre-wrap rounded bg-[#DFDDDD] bg-opacity-30 p-3 text-xs leading-relaxed text-[#333333]" style={{ fontFamily: "Arial, Helvetica, sans-serif" }}>
                     {draft.body}

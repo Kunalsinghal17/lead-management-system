@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { ArrowUpRight, SendHorizontal, Sparkles } from "lucide-react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell } from "recharts";
 import { api } from "../lib/api";
@@ -31,33 +31,49 @@ export default function AskAI() {
   const [thinking, setThinking] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
+  const location = useLocation();
+  const handedOff = useRef(false);
+
   useEffect(() => {
     Promise.all([api.listLeads({}), api.dashboard(30)])
-      .then(([l, s]) => { setLeads(l); setSummary(s); })
+      .then(([l, s]) => {
+        setLeads(l);
+        setSummary(s);
+        // Question handed off from the Leads search bar ("ask in plain English")
+        const q = (location.state as { q?: string } | null)?.q;
+        if (q && !handedOff.current) {
+          handedOff.current = true;
+          window.setTimeout(() => askWith(q, l, s), 100);
+        }
+      })
       .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chat, thinking]);
 
-  const ask = async (question: string) => {
-    const q = question.trim();
-    if (!q || !summary) return;
-    setInput("");
+  const askWith = (q: string, l: Lead[], s: DashboardSummary) => {
     setChat(c => [...c, { role: "user", question: q }]);
     setThinking(true);
-
-    // Refresh data so answers reflect the latest pipeline
-    const [l, s] = await Promise.all([api.listLeads({}), api.dashboard(30)]);
-    setLeads(l);
-    setSummary(s);
-
     window.setTimeout(() => {
       const answer = answerQuestion(q, l, s);
       setChat(c => [...c, { role: "assistant", answer }]);
       setThinking(false);
     }, 350);
+  };
+
+  const ask = async (question: string) => {
+    const q = question.trim();
+    if (!q || !summary) return;
+    setInput("");
+
+    // Refresh data so answers reflect the latest pipeline
+    const [l, s] = await Promise.all([api.listLeads({}), api.dashboard(30)]);
+    setLeads(l);
+    setSummary(s);
+    askWith(q, l, s);
   };
 
   const starterChips = [
@@ -70,7 +86,7 @@ export default function AskAI() {
   ];
 
   return (
-    <div className="flex h-[calc(100vh-3rem)] flex-col">
+    <div className="flex h-[calc(100vh-7.5rem)] flex-col">
       <div className="mb-4">
         <h1 className="text-xl font-bold text-[#333333]">Ask AI</h1>
         <p className="text-sm text-[#808081]">

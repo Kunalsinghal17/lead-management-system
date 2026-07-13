@@ -6,7 +6,14 @@ using Nexdigm.Lms.Api.Domain;
 
 namespace Nexdigm.Lms.Api.Services;
 
-/// <summary>BRDID12 — bulk upload template generation and validated import.</summary>
+/// <summary>
+/// BRDID12 — bulk upload with a two-step flow:
+///   1) dry run: validate every row, return a full preview (Valid / Error / Duplicate)
+///   2) import: insert only the valid rows.
+/// Duplicate rule: an email that already exists in LMS counts as a duplicate only when the
+/// existing lead was created within the configured window (default 7 days). Older matches
+/// are treated as repeat business and allowed.
+/// </summary>
 public class ExcelService
 {
     /// <summary>Exact template columns — uploads must match this header row.</summary>
@@ -19,12 +26,14 @@ public class ExcelService
     private readonly LmsDbContext _db;
     private readonly LeadService _leads;
     private readonly PermissionService _permissions;
+    private readonly IConfiguration _config;
 
-    public ExcelService(LmsDbContext db, LeadService leads, PermissionService permissions)
+    public ExcelService(LmsDbContext db, LeadService leads, PermissionService permissions, IConfiguration config)
     {
         _db = db;
         _leads = leads;
         _permissions = permissions;
+        _config = config;
     }
 
     public byte[] BuildTemplate()
@@ -41,7 +50,6 @@ public class ExcelService
             cell.Style.Font.FontColor = XLColor.White;
         }
 
-        // Example row
         ws.Cell(2, 1).Value = "RC-EXM-0001";
         ws.Cell(2, 2).Value = "Sample Contact";
         ws.Cell(2, 3).Value = "sample.contact@company.com";
@@ -60,7 +68,7 @@ public class ExcelService
         hints.Cell(3, 1).Value = "Stage: Enquiry / Lead / Proposal / Won / Lost";
         hints.Cell(4, 1).Value = "Status: Open / Won / Lost";
         hints.Cell(5, 1).Value = "Enquiry Handled By: email of a user allowed to own leads, e.g. an Executive (optional)";
-        hints.Cell(6, 1).Value = "Name and Email are mandatory. Duplicate emails already in LMS are rejected.";
+        hints.Cell(6, 1).Value = "Name and Email are mandatory. Emails already in LMS within the recent window are flagged as duplicates.";
 
         ws.Columns().AdjustToContents();
         using var ms = new MemoryStream();
@@ -68,12 +76,12 @@ public class ExcelService
         return ms.ToArray();
     }
 
-    public async Task<BulkUploadResult> ImportAsync(Stream file, CancellationToken ct = default)
+    public async Task<BulkUploadResult> ImportAsync(Stream file, bool dryRun, CancellationToken ct = default)
     {
         using var wb = new XLWorkbook(file);
         var ws = wb.Worksheets.FirstOrDefault(w => w.Name == "Leads") ?? wb.Worksheets.First();
 
-        // ---- Template validation: header row must match exactly ----
+        // ---- Template validation ----
         for (var i = 0; i < TemplateColumns.Length; i++)
         {
             var header = ws.Cell(1, i + 1).GetString().Trim();
@@ -83,20 +91,25 @@ public class ExcelService
                     "Please use the system-generated template.");
         }
 
-        var errors = new List<BulkRowError>();
-        var inserted = 0;
-        var total = 0;
+        var windowDays = _config.GetValue<int>("BulkUpload:DuplicateWindowDays", 7);
+        var duplicateCutoff = DateTime.UtcNow.AddDays(-windowDays);
 
-        // Valid handlers = roles with the "Own / Handle Leads" permission (default: Executives)
         var handlerRoles = await _permissions.RolesWithAsync(PermissionActions.OwnLeads, ct);
         var usersByEmail = await _db.Users
             .Where(u => u.IsActive && handlerRoles.Contains(u.Role))
             .ToDictionaryAsync(u => u.Email.ToLowerInvariant(), u => u.Id, ct);
 
-        var existingEmails = new HashSet<string>(
-            await _db.Leads.Where(l => l.IsActive).Select(l => l.Email.ToLower()).ToListAsync(ct));
+        // email → most recent creation date among active leads (for the duplicate window)
+        var existing = (await _db.Leads
+                .Where(l => l.IsActive)
+                .Select(l => new { l.Email, l.CreatedAtUtc })
+                .ToListAsync(ct))
+            .GroupBy(x => x.Email.ToLowerInvariant())
+            .ToDictionary(g => g.Key, g => g.Max(x => x.CreatedAtUtc));
 
+        var rows = new List<BulkRowPreview>();
         var seenInFile = new HashSet<string>();
+        var inserted = 0;
 
         var lastRow = ws.LastRowUsed()?.RowNumber() ?? 1;
         for (var row = 2; row <= lastRow; row++)
@@ -117,35 +130,36 @@ public class ExcelService
             var valueRaw = Cell(10);
             var remarks = Cell(11);
 
-            // skip fully blank rows silently
             if (string.IsNullOrWhiteSpace(name) && string.IsNullOrWhiteSpace(email) &&
                 string.IsNullOrWhiteSpace(reportCode) && string.IsNullOrWhiteSpace(phone))
-                continue;
+                continue; // fully blank rows are ignored
 
-            total++;
+            void Reject(string error) =>
+                rows.Add(new BulkRowPreview(row, name, email, industry, stage, status, handledBy, "Error", error));
+            void Duplicate(string why) =>
+                rows.Add(new BulkRowPreview(row, name, email, industry, stage, status, handledBy, "Duplicate", why));
 
             // ---- Row-level validation ----
-            if (string.IsNullOrWhiteSpace(name))
-            { errors.Add(new BulkRowError(row, "Name is mandatory.")); continue; }
+            if (string.IsNullOrWhiteSpace(name)) { Reject("Name is required."); continue; }
             if (string.IsNullOrWhiteSpace(email) || !email.Contains('@') || !email.Contains('.'))
-            { errors.Add(new BulkRowError(row, "A valid Email is mandatory.")); continue; }
+            { Reject("Invalid email format."); continue; }
 
             var emailKey = email.ToLowerInvariant();
             if (seenInFile.Contains(emailKey))
-            { errors.Add(new BulkRowError(row, $"Duplicate email '{email}' within the file.")); continue; }
-            if (existingEmails.Contains(emailKey))
-            { errors.Add(new BulkRowError(row, $"Duplicate: a lead with email '{email}' already exists in LMS.")); continue; }
+            { Duplicate("Duplicate of an earlier row in this file (same email)."); continue; }
+            if (existing.TryGetValue(emailKey, out var lastCreated) && lastCreated >= duplicateCutoff)
+            { Duplicate($"A lead with this email was created in LMS within the last {windowDays} days."); continue; }
 
             if (!string.IsNullOrWhiteSpace(stage) && !Enum.TryParse<LeadStage>(stage, true, out _))
-            { errors.Add(new BulkRowError(row, $"Invalid Stage '{stage}'. Allowed: Enquiry, Lead, Proposal, Won, Lost.")); continue; }
+            { Reject($"'{stage}' is not a valid Stage value."); continue; }
             if (!string.IsNullOrWhiteSpace(status) && !Enum.TryParse<LeadStatus>(status, true, out _))
-            { errors.Add(new BulkRowError(row, $"Invalid Status '{status}'. Allowed: Open, Won, Lost.")); continue; }
+            { Reject($"'{status}' is not a valid Status value."); continue; }
 
             decimal? value = null;
             if (!string.IsNullOrWhiteSpace(valueRaw))
             {
-                if (!decimal.TryParse(valueRaw, out var v) || v < 0)
-                { errors.Add(new BulkRowError(row, $"Value (INR) '{valueRaw}' is not a valid number.")); continue; }
+                if (!decimal.TryParse(valueRaw.Replace(",", ""), out var v) || v < 0)
+                { Reject($"Value (INR) '{valueRaw}' is not a valid number."); continue; }
                 value = v;
             }
 
@@ -153,11 +167,15 @@ public class ExcelService
             if (!string.IsNullOrWhiteSpace(handledBy))
             {
                 if (!usersByEmail.TryGetValue(handledBy.ToLowerInvariant(), out var uid))
-                { errors.Add(new BulkRowError(row, $"'Enquiry Handled By' user '{handledBy}' not found or not allowed to own leads.")); continue; }
+                { Reject($"'{handledBy}' is not on the team or cannot own leads — use an executive's email, or leave blank."); continue; }
                 assignedId = uid;
             }
 
-            try
+            // ---- Valid ----
+            seenInFile.Add(emailKey);
+            rows.Add(new BulkRowPreview(row, name, email, industry, stage, status, handledBy, "Valid", null));
+
+            if (!dryRun)
             {
                 await _leads.CreateLeadAsync(
                     LeadSource.BulkUpload,
@@ -172,17 +190,18 @@ public class ExcelService
                     status: string.IsNullOrWhiteSpace(status) ? null : status,
                     assignedToUserId: assignedId,
                     ct: ct);
-
-                seenInFile.Add(emailKey);
                 inserted++;
-            }
-            catch (BusinessRuleException ex)
-            {
-                errors.Add(new BulkRowError(row, ex.Message));
             }
         }
 
-        // File-level consistency: processed rows must equal uploaded rows
-        return new BulkUploadResult(total, inserted, errors.Count, errors);
+        var valid = rows.Count(r => r.RowStatus == "Valid");
+        return new BulkUploadResult(
+            TotalRows: rows.Count,
+            ValidRows: valid,
+            Inserted: inserted,
+            ErrorRows: rows.Count(r => r.RowStatus == "Error"),
+            DuplicateRows: rows.Count(r => r.RowStatus == "Duplicate"),
+            DryRun: dryRun,
+            Rows: rows);
     }
 }

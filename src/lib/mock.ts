@@ -84,8 +84,21 @@ const permissionMatrix: Record<string, Record<string, boolean>> = {
   BulkUpload:   { Admin: true, Manager: true, Executive: true, Basic: false },
   Export:       { Admin: true, Manager: true, Executive: false, Basic: false },
   DeleteLead:   { Admin: true, Manager: false, Executive: false, Basic: false },
-  AddUser:      { Admin: true, Manager: false, Executive: false, Basic: false }
+  AddUser:      { Admin: true, Manager: false, Executive: false, Basic: false },
+  // Page/module access (nav + route guards)
+  PageDashboard:        { Admin: true, Manager: true, Executive: true, Basic: true },
+  PageAskAI:            { Admin: true, Manager: true, Executive: true, Basic: true },
+  PageLeads:            { Admin: true, Manager: true, Executive: true, Basic: true },
+  PageCentralPool:      { Admin: true, Manager: true, Executive: true, Basic: true },
+  PageBulkUpload:       { Admin: true, Manager: true, Executive: true, Basic: false },
+  PageVisitorAnalytics: { Admin: true, Manager: true, Executive: true, Basic: false },
+  PageUsersRoles:       { Admin: true, Manager: false, Executive: false, Basic: false }
 };
+
+/** Cells locked ON so an Admin can never lock themselves out. */
+function isLockedPermission(action: string, role: string): boolean {
+  return role === "Admin" && (action === "AddUser" || action === "PageUsersRoles");
+}
 
 export function mockIsAllowed(role: Role, action: string): boolean {
   return permissionMatrix[action]?.[role] ?? false;
@@ -100,9 +113,8 @@ export function mockUpdatePermissions(matrix: Record<string, Record<string, bool
     if (!permissionMatrix[action]) continue;
     for (const [role, allowed] of Object.entries(roleMap)) {
       if (!(role in permissionMatrix[action])) continue;
-      // lockout guard — Admin can never lose user management
-      permissionMatrix[action][role] =
-        action === "AddUser" && role === "Admin" ? true : allowed;
+      // lockout guard — Admin can never lose user management or the Users & Roles page
+      permissionMatrix[action][role] = isLockedPermission(action, role) ? true : allowed;
     }
   }
   persist();
@@ -125,8 +137,15 @@ const masters: Masters = {
   roleMatrix: {}
 };
 
+interface MockVisitEvent {
+  ipAddress: string;
+  visitAtUtc: string;
+  timeSpentSeconds: number;
+}
+
 let leads: Lead[] = [];
 let visitors: VisitorStat[] = [];
+let visitEvents: MockVisitEvent[] = [];
 let notifications: NotificationRow[] = [];
 let nextLeadId = 56;
 let nextUserId = 7;
@@ -279,6 +298,26 @@ function buildSeedData() {
       lastVisitAtUtc: daysAgo(Math.floor(rnd() * 2))
     });
   }
+
+  // Individual visit events consistent with the per-IP aggregates
+  for (const s of visitors) {
+    const first = new Date(s.firstVisitAtUtc);
+    const last = new Date(s.lastVisitAtUtc);
+    const span = Math.max(0, Math.round((last.getTime() - first.getTime()) / 86400000));
+    const perVisit = Math.max(20, Math.floor(s.timeSpentSeconds / Math.max(1, s.visitCount)));
+    for (let v = 0; v < s.visitCount; v++) {
+      const when = new Date(first);
+      if (v > 0) {
+        when.setDate(when.getDate() + Math.floor(rnd() * (span + 1)));
+        when.setHours(6 + Math.floor(rnd() * 16));
+      }
+      visitEvents.push({
+        ipAddress: s.ipAddress,
+        visitAtUtc: when.toISOString(),
+        timeSpentSeconds: perVisit
+      });
+    }
+  }
 }
 
 // ------------------------------------------------------------------ persistence
@@ -290,7 +329,7 @@ const STORAGE_KEY = "lms.mock.v2";
 function persist() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      leads, visitors, notifications, users, permissionMatrix,
+      leads, visitors, visitEvents, notifications, users, permissionMatrix,
       nextLeadId, nextUserId, nextNotificationId
     }));
   } catch {
@@ -304,8 +343,10 @@ function hydrate(): boolean {
     if (!raw) return false;
     const s = JSON.parse(raw);
     if (!Array.isArray(s.leads) || !Array.isArray(s.users)) return false;
+    if (!Array.isArray(s.visitEvents)) return false; // older saved state — reseed with events
     leads = s.leads;
     visitors = s.visitors ?? [];
+    visitEvents = s.visitEvents;
     notifications = s.notifications ?? [];
     users.length = 0;
     users.push(...s.users);
@@ -360,13 +401,28 @@ export function mockLogin(email: string, password: string): SessionUser {
 
 // ------------------------------------------------------------------ leads
 
+/** Role-based visibility: all / team (manager: self + direct reports) / own. */
+function scopeLeads(list: Lead[], currentUserId: number, role: Role): Lead[] {
+  if (mockIsAllowed(role, "ViewAllLeads")) return list;
+  if (role === "Manager") {
+    const teamIds = new Set(users.filter(u => u.managerId === currentUserId && u.isActive).map(u => u.id));
+    teamIds.add(currentUserId);
+    return list.filter(l => l.assignedToUserId !== null && teamIds.has(l.assignedToUserId!));
+  }
+  return list.filter(l => l.assignedToUserId === currentUserId);
+}
+
+export function mockScope(role: Role): string {
+  if (mockIsAllowed(role, "ViewAllLeads")) return "all";
+  return role === "Manager" ? "team" : "own";
+}
+
 export function mockListLeads(filters: LeadFilters, currentUserId: number, role: Role): Lead[] {
   refreshAges();
   let list = leads.filter(l => l.isActive);
 
-  // Roles without "View All Leads" only ever see their own leads
-  if (!mockIsAllowed(role, "ViewAllLeads"))
-    list = list.filter(l => l.assignedToUserId === currentUserId);
+  // Central pool stays visible to everyone — unowned leads are common property
+  if (filters.view !== "pool") list = scopeLeads(list, currentUserId, role);
 
   switch (filters.view) {
     case "my":
@@ -548,7 +604,7 @@ export function mockUpdateLead(leadId: number, req: UpdateLeadPayload, actingUse
 
     if (statusToApply === "Lost") {
       const reason = req.lostReason ?? lead.lostReason;
-      if (!reason) throw new MockApiError("Lost Reason is mandatory when marking a lead as Lost (BRDID09).");
+      if (!reason) throw new MockApiError("Lost Reason is mandatory when marking a lead as Lost.");
       if (reason.toLowerCase() === "other" && !(req.lostReasonOther ?? lead.lostReasonOther))
         throw new MockApiError("Please describe the reason when 'Other' is selected.");
       lead.lostReason = reason;
@@ -578,7 +634,7 @@ export function mockDayUpdate(leadId: number, dayNumber: number, note: string, a
   if (lead.assignedToUserId === null)
     throw new MockApiError("Assign the lead before recording day-wise updates.");
   if (lead.enquiryType !== "Lead")
-    throw new MockApiError("Day-wise updates apply to classified Leads only (BRDID05/06).");
+    throw new MockApiError("Day-wise updates apply to classified Leads only.");
   if (isFinalStatus(lead.status))
     throw new MockApiError("Lead is closed — day-wise updates are no longer required.");
   if (dayNumber < 1 || dayNumber > 5)
@@ -638,13 +694,15 @@ export function mockSimulateIngestion(): Lead {
 
 // ------------------------------------------------------------------ dashboard
 
-export function mockDashboard(days = 30): DashboardSummary {
+export function mockDashboard(days = 30, currentUserId = 0, role: Role = "Admin"): DashboardSummary {
   refreshAges();
-  const active = leads.filter(l => l.isActive);
+  const active = scopeLeads(leads.filter(l => l.isActive), currentUserId, role);
   const real = active.filter(l => l.enquiryType !== "NotLead");
+  const open = real.filter(l => l.status === "Open");
   const won = real.filter(l => l.status === "Won").length;
   const lost = real.filter(l => l.status === "Lost").length;
   const decided = won + lost;
+  const now = new Date();
 
   const trend = [];
   for (let i = days - 1; i >= 0; i--) {
@@ -666,22 +724,134 @@ export function mockDashboard(days = 30): DashboardSummary {
 
   const sum = (arr: Lead[]) => arr.reduce((acc, l) => acc + (l.valueInr ?? 0), 0);
 
+  // ---- Needs attention ----
+  const currentDay = (l: Lead) => {
+    if (!l.assignedAtUtc) return 0;
+    return Math.min(5, daysSinceIso(l.assignedAtUtc) + 1);
+  };
+  const missingUpdates = open.filter(l =>
+    l.assignedToUserId !== null && l.enquiryType === "Lead" &&
+    currentDay(l) >= 1 && !l.dayUpdates.some(d => d.dayNumber === currentDay(l))).length;
+  const needsAttention = {
+    escalated: open.filter(l => l.ageDays > 10).length,
+    missingUpdates,
+    aging: open.filter(l => l.ageDays > 5 && l.ageDays <= 10).length,
+    unassigned: real.filter(l => l.assignedToUserId === null && l.status === "Open").length,
+    unclassified: active.filter(l => l.enquiryType === "Unclassified" && l.status === "Open").length
+  };
+
+  // ---- Follow-up adherence ----
+  let totalDue = 0, totalFilled = 0, onTrack = 0, missed = 0;
+  for (const l of real.filter(x => x.assignedToUserId !== null && x.enquiryType === "Lead" && x.assignedAtUtc)) {
+    const end = l.closedAtUtc ? new Date(l.closedAtUtc) : now;
+    const daysSince = Math.max(0, Math.round((dateOnly(end).getTime() - dateOnly(new Date(l.assignedAtUtc!)).getTime()) / 86400000));
+    const due = Math.min(5, daysSince + 1);
+    const filled = Math.min(l.dayUpdates.filter(d => d.dayNumber <= due).length, due);
+    totalDue += due;
+    totalFilled += filled;
+    if (filled >= due) onTrack++; else missed++;
+  }
+
+  // ---- Period deltas ----
+  const since = new Date(); since.setDate(since.getDate() - days + 1); since.setHours(0, 0, 0, 0);
+  const prevSince = new Date(since); prevSince.setDate(prevSince.getDate() - days);
+  const inWindow = (iso: string, from: Date, to?: Date) => {
+    const t = new Date(iso).getTime();
+    return t >= from.getTime() && (!to || t < to.getTime());
+  };
+  const cur = real.filter(l => inWindow(l.createdAtUtc, since));
+  const prev = real.filter(l => inWindow(l.createdAtUtc, prevSince, since));
+  const closedAt = (l: Lead) => l.closedAtUtc ?? l.lastUpdateAtUtc;
+  const curWon = real.filter(l => l.status === "Won" && inWindow(closedAt(l), since));
+  const prevWon = real.filter(l => l.status === "Won" && inWindow(closedAt(l), prevSince, since));
+  const curLost = real.filter(l => l.status === "Lost" && inWindow(closedAt(l), since)).length;
+  const prevLost = real.filter(l => l.status === "Lost" && inWindow(closedAt(l), prevSince, since)).length;
+  const pctChange = (c: number, p: number) => (p === 0 ? (c > 0 ? 100 : 0) : Math.round((1000 * (c - p)) / p) / 10);
+  const conv = (w: number, l: number) => (w + l === 0 ? 0 : (100 * w) / (w + l));
+
   return {
     totalLeads: real.length,
-    openLeads: real.filter(l => l.status === "Open").length,
+    openLeads: open.length,
     wonLeads: won,
     lostLeads: lost,
     closedNotLeads: active.filter(l => l.enquiryType === "NotLead").length,
-    unassignedLeads: real.filter(l => l.assignedToUserId === null && l.status === "Open").length,
+    unassignedLeads: needsAttention.unassigned,
     conversionRatePct: decided === 0 ? 0 : Math.round((1000 * won) / decided) / 10,
-    pipelineValueInr: sum(real.filter(l => l.status === "Open")),
+    pipelineValueInr: sum(open),
     wonValueInr: sum(real.filter(l => l.status === "Won")),
     lostValueInr: sum(real.filter(l => l.status === "Lost")),
     leadsPerDay: trend,
     bySource: group(active, l => l.source),
     byStage: group(real, l => l.stage),
-    byIndustry: group(real, l => l.industry ?? null).slice(0, 8),
-    lostReasons: group(real.filter(l => l.status === "Lost"), l => l.lostReason ?? null)
+    byIndustry: group(real, l => l.industry).slice(0, 8),
+    lostReasons: group(real.filter(l => l.status === "Lost"), l => l.lostReason),
+    needsAttention,
+    adherencePct: totalDue === 0 ? 100 : Math.round((100 * totalFilled) / totalDue),
+    adherenceOnTrack: onTrack,
+    adherenceMissed: missed,
+    deltas: {
+      totalLeadsPct: pctChange(cur.length, prev.length),
+      wonPct: pctChange(curWon.length, prevWon.length),
+      conversionPts: Math.round(10 * (conv(curWon.length, curLost) - conv(prevWon.length, prevLost))) / 10,
+      pipelineValuePct: pctChange(sum(cur.filter(l => l.status === "Open")), sum(prev.filter(l => l.status === "Open"))),
+      wonValuePct: pctChange(sum(curWon), sum(prevWon))
+    },
+    scope: mockScope(role)
+  };
+}
+
+function dateOnly(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function daysSinceIso(iso: string): number {
+  return Math.max(0, Math.round((dateOnly(new Date()).getTime() - dateOnly(new Date(iso)).getTime()) / 86400000));
+}
+
+export function mockVisitorAnalytics(days = 30) {
+  const since = new Date();
+  since.setDate(since.getDate() - days + 1);
+  since.setHours(0, 0, 0, 0);
+
+  const firstSeen = new Map(visitors.map(v => [v.ipAddress, v.firstVisitAtUtc.slice(0, 10)]));
+  const inRange = visitEvents.filter(e => new Date(e.visitAtUtc) >= since);
+
+  const daily = [];
+  for (let i = 0; i < days; i++) {
+    const d = new Date(since);
+    d.setDate(d.getDate() + i);
+    const key = d.toISOString().slice(0, 10);
+    const dayEvents = inRange.filter(e => e.visitAtUtc.slice(0, 10) === key);
+    const newV = dayEvents.filter(e => firstSeen.get(e.ipAddress) === key).length;
+    daily.push({ date: key, newVisitors: newV, returningVisitors: dayEvents.length - newV });
+  }
+
+  const dist = (raw: [string, number][]) => {
+    const total = raw.reduce((a, [, c]) => a + c, 0);
+    return raw.map(([name, value]) => ({ name, value, pct: total === 0 ? 0 : Math.round((100 * value) / total) }));
+  };
+
+  const perDay = daily.map(d => d.newVisitors + d.returningVisitors);
+  return {
+    totalVisits: inRange.length,
+    uniqueVisitors: new Set(inRange.map(e => e.ipAddress)).size,
+    returningVisitors: visitors.filter(v => v.visitCount > 1).length,
+    avgTimeSeconds: visitors.length === 0 ? 0 : Math.round(visitors.reduce((a, v) => a + v.timeSpentSeconds, 0) / visitors.length),
+    peakDayVisits: perDay.length === 0 ? 0 : Math.max(...perDay),
+    avgVisitsPerDay: perDay.length === 0 ? 0 : Math.round((10 * inRange.length) / perDay.length) / 10,
+    daily,
+    frequency: dist([
+      ["1 visit", visitors.filter(v => v.visitCount === 1).length],
+      ["2 visits", visitors.filter(v => v.visitCount === 2).length],
+      ["3–5 visits", visitors.filter(v => v.visitCount >= 3 && v.visitCount <= 5).length],
+      ["6+ visits", visitors.filter(v => v.visitCount >= 6).length]
+    ]),
+    timeOnSite: dist([
+      ["Under 1m", visitors.filter(v => v.timeSpentSeconds < 60).length],
+      ["1–3m", visitors.filter(v => v.timeSpentSeconds >= 60 && v.timeSpentSeconds < 180).length],
+      ["3–5m", visitors.filter(v => v.timeSpentSeconds >= 180 && v.timeSpentSeconds < 300).length],
+      ["5m+", visitors.filter(v => v.timeSpentSeconds >= 300).length]
+    ])
   };
 }
 
@@ -689,6 +859,39 @@ export function mockDashboard(days = 30): DashboardSummary {
 
 export function mockUsers(): UserRow[] {
   return users.map(({ password: _pw, ...u }) => u);
+}
+
+export function mockUpdateUser(id: number, payload: {
+  fullName: string; role: Role; managerId?: number | null;
+  isActive: boolean; newPassword?: string | null;
+}): UserRow {
+  const user = users.find(u => u.id === id);
+  if (!user) throw new MockApiError("User not found.", 404);
+  if (!payload.fullName?.trim()) throw new MockApiError("Full name is required.");
+  if (payload.managerId === id) throw new MockApiError("A user cannot report to themselves.");
+  if (payload.newPassword && payload.newPassword.length < 8)
+    throw new MockApiError("New password must be at least 8 characters.");
+
+  // Lockout guard — keep at least one active Admin
+  const losesAdmin = user.role === "Admin" && (payload.role !== "Admin" || !payload.isActive);
+  if (losesAdmin && !users.some(u => u.id !== id && u.role === "Admin" && u.isActive))
+    throw new MockApiError("This is the last active Admin — assign another Admin first.");
+
+  user.fullName = payload.fullName.trim();
+  user.role = payload.role;
+  user.managerId = payload.managerId ?? null;
+  user.managerName = users.find(u => u.id === payload.managerId)?.fullName ?? null;
+  user.isActive = payload.isActive;
+  if (payload.newPassword) user.password = payload.newPassword;
+
+  // Reflect the new name on owned leads
+  for (const l of leads) {
+    if (l.assignedToUserId === id) l.assignedToName = user.fullName;
+  }
+
+  persist();
+  const { password: _pw, ...row } = user;
+  return row;
 }
 
 export function mockCreateUser(fullName: string, email: string, password: string, role: Role, managerId?: number | null): UserRow {
@@ -721,8 +924,14 @@ export function mockVisitors(): VisitorStat[] {
   return [...visitors].sort((a, b) => b.lastVisitAtUtc.localeCompare(a.lastVisitAtUtc));
 }
 
-export function mockNotifications(): NotificationRow[] {
-  return [...notifications].sort((a, b) => b.createdAtUtc.localeCompare(a.createdAtUtc)).slice(0, 200);
+/** Admin/Manager see all notifications; other roles only ones addressed to them. */
+export function mockNotifications(currentUserId: number, role: Role): NotificationRow[] {
+  let list = [...notifications];
+  if (role !== "Admin" && role !== "Manager") {
+    const email = users.find(u => u.id === currentUserId)?.email ?? "";
+    list = list.filter(n => n.toEmail === email || n.ccEmail === email);
+  }
+  return list.sort((a, b) => b.createdAtUtc.localeCompare(a.createdAtUtc)).slice(0, 200);
 }
 
 /** Mirrors the API's 6 PM sweep (BRDID10) so the demo can trigger it on demand. */
@@ -781,7 +990,9 @@ export function mockTemplateCsv(): string {
     'RC-EXM-0001,Sample Contact,sample.contact@company.com,+91,9800000000,Healthcare,Enquiry,Open,aditi.sharma@nexdigm.com,250000,Migrated from legacy tracker\n';
 }
 
-export function mockBulkUpload(text: string): BulkUploadResult {
+const DUPLICATE_WINDOW_DAYS = 7;
+
+export function mockBulkUpload(text: string, dryRun: boolean): BulkUploadResult {
   const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
   if (lines.length === 0) throw new MockApiError("The file is empty.");
 
@@ -792,11 +1003,19 @@ export function mockBulkUpload(text: string): BulkUploadResult {
         `Template mismatch at column ${i + 1}: expected '${TEMPLATE_COLUMNS[i]}' but found '${header[i] ?? ""}'. Please use the system-generated template.`);
   }
 
-  const errors: { row: number; error: string }[] = [];
+  const rows: BulkUploadResult["rows"] = [];
   let inserted = 0;
-  let total = 0;
   const seen = new Set<string>();
-  const existing = new Set(leads.filter(l => l.isActive).map(l => l.email.toLowerCase()));
+
+  // Duplicate window: same email within the last N days = duplicate;
+  // older matches are repeat business and allowed.
+  const cutoff = Date.now() - DUPLICATE_WINDOW_DAYS * 86400000;
+  const lastCreated = new Map<string, number>();
+  for (const l of leads.filter(x => x.isActive)) {
+    const key = l.email.toLowerCase();
+    const t = new Date(l.createdAtUtc).getTime();
+    if (!lastCreated.has(key) || lastCreated.get(key)! < t) lastCreated.set(key, t);
+  }
 
   for (let r = 1; r < lines.length; r++) {
     const cols = splitCsvLine(lines[r]);
@@ -804,62 +1023,78 @@ export function mockBulkUpload(text: string): BulkUploadResult {
       [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(i => (cols[i] ?? "").trim());
 
     if (!name && !email && !reportCode && !phone) continue;
-    total++;
     const rowNo = r + 1;
+    const reject = (error: string) =>
+      rows.push({ row: rowNo, name, email, industry, stage, status, handledBy, rowStatus: "Error", error });
+    const duplicate = (error: string) =>
+      rows.push({ row: rowNo, name, email, industry, stage, status, handledBy, rowStatus: "Duplicate", error });
 
-    if (!name) { errors.push({ row: rowNo, error: "Name is mandatory." }); continue; }
-    if (!email || !email.includes("@") || !email.includes(".")) {
-      errors.push({ row: rowNo, error: "A valid Email is mandatory." }); continue;
-    }
+    if (!name) { reject("Name is required."); continue; }
+    if (!email || !email.includes("@") || !email.includes(".")) { reject("Invalid email format."); continue; }
+
     const key = email.toLowerCase();
-    if (seen.has(key)) { errors.push({ row: rowNo, error: `Duplicate email '${email}' within the file.` }); continue; }
-    if (existing.has(key)) { errors.push({ row: rowNo, error: `Duplicate: a lead with email '${email}' already exists in LMS.` }); continue; }
+    if (seen.has(key)) { duplicate("Duplicate of an earlier row in this file (same email)."); continue; }
+    if (lastCreated.has(key) && lastCreated.get(key)! >= cutoff) {
+      duplicate(`A lead with this email was created in LMS within the last ${DUPLICATE_WINDOW_DAYS} days.`); continue;
+    }
     if (stage && !["Enquiry", "Lead", "Proposal", "Won", "Lost"].includes(stage)) {
-      errors.push({ row: rowNo, error: `Invalid Stage '${stage}'. Allowed: Enquiry, Lead, Proposal, Won, Lost.` }); continue;
+      reject(`'${stage}' is not a valid Stage value.`); continue;
     }
     if (status && !["Open", "Won", "Lost"].includes(status)) {
-      errors.push({ row: rowNo, error: `Invalid Status '${status}'. Allowed: Open, Won, Lost.` }); continue;
+      reject(`'${status}' is not a valid Status value.`); continue;
     }
     let value: number | null = null;
     if (valueRaw) {
       const v = Number(valueRaw.replace(/,/g, ""));
-      if (isNaN(v) || v < 0) { errors.push({ row: rowNo, error: `Value (INR) '${valueRaw}' is not a valid number.` }); continue; }
+      if (isNaN(v) || v < 0) { reject(`Value (INR) '${valueRaw}' is not a valid number.`); continue; }
       value = v;
     }
     let owner: MockUser | undefined;
     if (handledBy) {
       owner = users.find(u =>
         u.email.toLowerCase() === handledBy.toLowerCase() && u.isActive && mockIsAllowed(u.role, "OwnLeads"));
-      if (!owner) { errors.push({ row: rowNo, error: `'Enquiry Handled By' user '${handledBy}' not found or not allowed to own leads.` }); continue; }
+      if (!owner) { reject(`'${handledBy}' is not on the team or cannot own leads — use an executive's email, or leave blank.`); continue; }
     }
 
-    const lead = mockCreateLead({
-      name, email,
-      phone: phone || undefined,
-      countryCode: countryCode || undefined,
-      industry: industry || undefined,
-      reportCode: reportCode || undefined,
-      remarks: remarks || undefined,
-      valueInr: value
-    }, "BulkUpload");
-
-    if (stage && stage !== "Enquiry") { lead.stage = stage as Stage; lead.enquiryType = "Lead"; }
-    if (status && status !== "Open") {
-      lead.status = status as Status;
-      lead.enquiryType = "Lead";
-      lead.closedAtUtc = new Date().toISOString();
-    }
-    if (owner) {
-      lead.assignedToUserId = owner.id;
-      lead.assignedToName = owner.fullName;
-      lead.assignedAtUtc = new Date().toISOString();
-    }
     seen.add(key);
-    inserted++;
+    rows.push({ row: rowNo, name, email, industry, stage, status, handledBy, rowStatus: "Valid", error: null });
+
+    if (!dryRun) {
+      const lead = mockCreateLead({
+        name, email,
+        phone: phone || undefined,
+        countryCode: countryCode || undefined,
+        industry: industry || undefined,
+        reportCode: reportCode || undefined,
+        remarks: remarks || undefined,
+        valueInr: value
+      }, "BulkUpload");
+
+      if (stage && stage !== "Enquiry") { lead.stage = stage as Stage; lead.enquiryType = "Lead"; }
+      if (status && status !== "Open") {
+        lead.status = status as Status;
+        lead.enquiryType = "Lead";
+        lead.closedAtUtc = new Date().toISOString();
+      }
+      if (owner) {
+        lead.assignedToUserId = owner.id;
+        lead.assignedToName = owner.fullName;
+        lead.assignedAtUtc = new Date().toISOString();
+      }
+      inserted++;
+    }
   }
 
-  persist();
-  return { totalRows: total, inserted, failed: errors.length, errors };
+  if (!dryRun) persist();
+  return {
+    totalRows: rows.length,
+    validRows: rows.filter(r => r.rowStatus === "Valid").length,
+    inserted,
+    errorRows: rows.filter(r => r.rowStatus === "Error").length,
+    duplicateRows: rows.filter(r => r.rowStatus === "Duplicate").length,
+    dryRun,
+    rows
+  };
 }
 
 function splitCsvLine(line: string): string[] {

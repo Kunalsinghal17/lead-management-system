@@ -1,41 +1,123 @@
 import React, { useRef, useState } from "react";
-import { CloudUpload, Download, FileSpreadsheet } from "lucide-react";
+import { CircleCheck, CloudUpload, Download, FileSpreadsheet, RotateCcw } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import { BulkUploadResult } from "../lib/types";
 
 /**
- * BRDID12 — bulk upload of historical/legacy leads via the system template.
- * Template validation, row-level validation and an error report per row.
+ * BRDID12 — bulk upload with a validate-first flow:
+ *   1) choose file → 2) validation preview (Valid / Error / Duplicate per row)
+ *   → 3) import only the valid rows → summary.
+ * Duplicate rule: same email already in LMS within the last 7 days = duplicate;
+ * older matches are treated as repeat business and allowed.
  */
 export default function BulkUpload() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<BulkUploadResult | null>(null);
   const [result, setResult] = useState<BulkUploadResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const upload = async () => {
+  const reset = () => {
+    setFile(null);
+    setPreview(null);
+    setResult(null);
+    setError(null);
+  };
+
+  const pick = (f: File) => {
+    setFile(f);
+    setPreview(null);
+    setResult(null);
+    setError(null);
+  };
+
+  const validate = async () => {
     if (!file) return;
     setError(null);
-    setResult(null);
     setBusy(true);
     try {
-      const res = await api.bulkUpload(file);
-      setResult(res);
+      setPreview(await api.bulkUpload(file, true));
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Upload failed.");
+      setError(e instanceof ApiError ? e.message : "Validation failed.");
     } finally {
       setBusy(false);
     }
   };
 
+  const importValid = async () => {
+    if (!file) return;
+    setError(null);
+    setBusy(true);
+    try {
+      const res = await api.bulkUpload(file, false);
+      setResult(res);
+      setPreview(null);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Import failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const statusChip = (s: string) => {
+    const styles: Record<string, { bg: string; fg: string }> = {
+      Valid: { bg: "#C4E4C4", fg: "#1C4924" },
+      Error: { bg: "#ECCAE0", fg: "#55204F" },
+      Duplicate: { bg: "#FBE5C3", fg: "#725220" }
+    };
+    const st = styles[s] ?? styles.Error;
+    return (
+      <span className="rounded px-1.5 py-0.5 text-[10px] font-bold" style={{ backgroundColor: st.bg, color: st.fg }}>
+        {s}
+      </span>
+    );
+  };
+
+  const rowsTable = (data: BulkUploadResult) => (
+    <div className="max-h-96 overflow-auto rounded-md border border-[#DFDDDD]">
+      <table className="w-full min-w-[760px] text-left text-xs">
+        <thead className="sticky top-0 bg-[#DFDDDD]">
+          <tr className="text-[#333333]">
+            <th className="px-3 py-2 font-bold">Row</th>
+            <th className="px-3 py-2 font-bold">Name</th>
+            <th className="px-3 py-2 font-bold">Email</th>
+            <th className="px-3 py-2 font-bold">Industry</th>
+            <th className="px-3 py-2 font-bold">Stage</th>
+            <th className="px-3 py-2 font-bold">Status</th>
+            <th className="px-3 py-2 font-bold">Handled by</th>
+            <th className="px-3 py-2 font-bold">Result</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.rows.map(r => (
+            <tr key={r.row} className="border-t border-[#DFDDDD] align-top">
+              <td className="px-3 py-2 font-bold text-[#645BA8]">{r.row}</td>
+              <td className="px-3 py-2 text-[#333333]">{r.name || "—"}</td>
+              <td className="px-3 py-2 text-[#333333]">{r.email || "—"}</td>
+              <td className="px-3 py-2 text-[#333333]">{r.industry || "—"}</td>
+              <td className="px-3 py-2 text-[#333333]">{r.stage || "—"}</td>
+              <td className="px-3 py-2 text-[#333333]">{r.status || "—"}</td>
+              <td className="px-3 py-2 text-[#333333]">{r.handledBy || "—"}</td>
+              <td className="px-3 py-2">
+                {statusChip(r.rowStatus)}
+                {r.error && <div className="mt-0.5 text-[10px]" style={{ color: r.rowStatus === "Duplicate" ? "#725220" : "#712B69" }}>{r.error}</div>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
   return (
-    <div className="max-w-3xl">
+    <div className="max-w-4xl">
       <div className="mb-5">
         <h1 className="text-xl font-bold text-[#333333]">Bulk Upload</h1>
         <p className="text-sm text-[#808081]">
-          Migrate historical or offline leads in one go. Only the system-generated template is accepted —
-          columns are validated, then every row is checked before insertion.
+          Migrate historical or offline leads. Every row is validated first — you review the preview,
+          then import only the clean rows. Emails repeated within 7 days are flagged as duplicates;
+          older matches count as repeat business.
         </p>
       </div>
 
@@ -46,7 +128,8 @@ export default function BulkUpload() {
             <div className="text-sm font-bold text-[#333333]">1 · Download the template</div>
             <p className="mt-1 text-xs text-[#808081]">
               Fixed columns: Report Code, Name, Email, Country Code, Phone, Industry, Stage, Status,
-              Enquiry Handled By, Value (INR), Remarks. Name and Email are mandatory.
+              Enquiry Handled By, Value (INR), Remarks. Name and Email are mandatory; "Enquiry Handled By"
+              must be an executive's email or blank (stays in the central pool).
             </p>
           </div>
           <button
@@ -58,20 +141,20 @@ export default function BulkUpload() {
         </div>
       </div>
 
-      {/* Step 2 — upload */}
+      {/* Step 2 — file + validate */}
       <div className="mb-4 rounded-lg border border-[#DFDDDD] p-5">
-        <div className="text-sm font-bold text-[#333333]">2 · Upload the filled file</div>
+        <div className="text-sm font-bold text-[#333333]">2 · Upload & validate</div>
         <div
-          className="mt-3 flex cursor-pointer flex-col items-center rounded-md border-2 border-dashed border-[#C6BDDD] px-6 py-10 text-center hover:border-[#645BA8]"
+          className="mt-3 flex cursor-pointer flex-col items-center rounded-md border-2 border-dashed border-[#C6BDDD] px-6 py-8 text-center hover:border-[#645BA8]"
           onClick={() => fileRef.current?.click()}
           onDragOver={e => e.preventDefault()}
           onDrop={e => {
             e.preventDefault();
             const f = e.dataTransfer.files?.[0];
-            if (f) { setFile(f); setResult(null); setError(null); }
+            if (f) pick(f);
           }}
         >
-          <CloudUpload size={28} className="mb-2 text-[#9F91C6]" />
+          <CloudUpload size={26} className="mb-2 text-[#9F91C6]" />
           {file ? (
             <div className="flex items-center gap-2 text-sm font-bold text-[#333333]">
               <FileSpreadsheet size={16} className="text-[#2D7D3E]" /> {file.name}
@@ -89,17 +172,25 @@ export default function BulkUpload() {
             className="hidden"
             onChange={e => {
               const f = e.target.files?.[0];
-              if (f) { setFile(f); setResult(null); setError(null); }
+              if (f) pick(f);
             }}
           />
         </div>
-        <div className="mt-3 flex justify-end">
+        <div className="mt-3 flex justify-end gap-2">
+          {file && (
+            <button
+              onClick={reset}
+              className="flex items-center gap-1 rounded-md border border-[#CAC8C7] px-3 py-2 text-xs font-bold text-[#333333] hover:bg-[#DFDDDD]"
+            >
+              <RotateCcw size={12} /> Start over
+            </button>
+          )}
           <button
-            onClick={upload}
+            onClick={validate}
             disabled={!file || busy}
             className="rounded-md bg-[#645BA8] px-4 py-2 text-sm font-bold text-white hover:bg-[#2C2561] disabled:opacity-50"
           >
-            {busy ? "Validating…" : "Validate & import"}
+            {busy && !preview ? "Validating…" : "Validate file"}
           </button>
         </div>
       </div>
@@ -110,42 +201,46 @@ export default function BulkUpload() {
         </div>
       )}
 
-      {/* Step 3 — result */}
+      {/* Step 3 — preview & confirm */}
+      {preview && (
+        <div className="mb-4 rounded-lg border border-[#DFDDDD] p-5">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-bold text-[#333333]">3 · Review & import</div>
+              <div className="text-xs text-[#808081]">
+                {preview.validRows} valid · {preview.errorRows} errors · {preview.duplicateRows} duplicates.
+                Error and duplicate rows are skipped — fix them in the file and re-validate if needed.
+              </div>
+            </div>
+            <button
+              onClick={importValid}
+              disabled={busy || preview.validRows === 0}
+              className="rounded-md bg-[#2D7D3E] px-4 py-2 text-sm font-bold text-white hover:bg-[#1C4924] disabled:opacity-50"
+            >
+              {busy ? "Importing…" : `Import ${preview.validRows} lead${preview.validRows === 1 ? "" : "s"}`}
+            </button>
+          </div>
+          {rowsTable(preview)}
+        </div>
+      )}
+
+      {/* Step 4 — result */}
       {result && (
         <div className="rounded-lg border border-[#DFDDDD] p-5">
-          <div className="mb-3 text-sm font-bold text-[#333333]">3 · Upload summary</div>
+          <div className="mb-3 flex items-center gap-2">
+            <CircleCheck size={18} className="text-[#2D7D3E]" />
+            <div className="text-sm font-bold text-[#333333]">
+              Imported {result.inserted} leads — they are now in the Lead Tracker
+              {result.rows.some(r => r.rowStatus === "Valid" && !r.handledBy) ? " and the central pool" : ""}.
+            </div>
+          </div>
           <div className="mb-4 grid grid-cols-3 gap-3">
             <Summary label="Rows processed" value={result.totalRows} color="#333333" bg="#DFDDDD" />
-            <Summary label="Inserted" value={result.inserted} color="#1C4924" bg="#C4E4C4" />
-            <Summary label="Rejected" value={result.failed} color="#55204F" bg="#ECCAE0" />
+            <Summary label="Imported" value={result.inserted} color="#1C4924" bg="#C4E4C4" />
+            <Summary label="Skipped" value={result.errorRows + result.duplicateRows} color="#55204F" bg="#ECCAE0" />
           </div>
-
-          {result.errors.length > 0 && (
-            <div className="overflow-hidden rounded-md border border-[#DFDDDD]">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-[#DFDDDD] bg-opacity-40">
-                  <tr>
-                    <th className="px-3 py-2 font-bold text-[#333333]">Row</th>
-                    <th className="px-3 py-2 font-bold text-[#333333]">Why it was rejected</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {result.errors.map((e, i) => (
-                    <tr key={i} className="border-t border-[#DFDDDD]">
-                      <td className="px-3 py-2 font-bold text-[#712B69]">{e.row}</td>
-                      <td className="px-3 py-2 text-[#333333]">{e.error}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {result.inserted > 0 && (
-            <p className="mt-3 text-xs text-[#808081]">
-              Imported leads follow the same schema and defaults as auto-created leads (BRDID03) and are
-              now available in the Lead Tracker.
-            </p>
+          {(result.errorRows > 0 || result.duplicateRows > 0) && rowsTable(
+            { ...result, rows: result.rows.filter(r => r.rowStatus !== "Valid") }
           )}
         </div>
       )}

@@ -36,6 +36,67 @@ public class VisitorsController : ControllerBase
             v.Id, v.IpAddress, v.TimeSpentSeconds, v.VisitCount, v.FirstVisitAtUtc, v.LastVisitAtUtc)).ToList();
     }
 
+    /// <summary>
+    /// Aggregated visitor analytics: daily new-vs-returning visits, visit-frequency and
+    /// time-on-site distributions.
+    /// </summary>
+    [HttpGet("analytics")]
+    [Authorize]
+    public async Task<ActionResult<VisitorAnalytics>> Analytics([FromQuery] int days = 30, CancellationToken ct = default)
+    {
+        days = Math.Clamp(days, 7, 365);
+        var since = DateTime.UtcNow.Date.AddDays(-days + 1);
+
+        var stats = await _db.VisitorStats.ToListAsync(ct);
+        var events = await _db.VisitEvents.Where(e => e.VisitAtUtc >= since).ToListAsync(ct);
+        var firstSeen = stats.ToDictionary(s => s.IpAddress, s => s.FirstVisitAtUtc.Date);
+
+        var daily = Enumerable.Range(0, days)
+            .Select(i => since.AddDays(i))
+            .Select(d =>
+            {
+                var dayEvents = events.Where(e => e.VisitAtUtc.Date == d).ToList();
+                var newV = dayEvents.Count(e => firstSeen.TryGetValue(e.IpAddress, out var f) && f == d);
+                return new DailyVisits(d.ToString("yyyy-MM-dd"), newV, dayEvents.Count - newV);
+            })
+            .ToList();
+
+        static List<DistributionBucket> Distribute(List<(string Name, int Count)> raw)
+        {
+            var total = raw.Sum(r => r.Count);
+            return raw.Select(r => new DistributionBucket(
+                r.Name, r.Count, total == 0 ? 0 : Math.Round(100.0 * r.Count / total, 0))).ToList();
+        }
+
+        var frequency = Distribute(new List<(string, int)>
+        {
+            ("1 visit", stats.Count(s => s.VisitCount == 1)),
+            ("2 visits", stats.Count(s => s.VisitCount == 2)),
+            ("3–5 visits", stats.Count(s => s.VisitCount >= 3 && s.VisitCount <= 5)),
+            ("6+ visits", stats.Count(s => s.VisitCount >= 6))
+        });
+
+        var timeOnSite = Distribute(new List<(string, int)>
+        {
+            ("Under 1m", stats.Count(s => s.TimeSpentSeconds < 60)),
+            ("1–3m", stats.Count(s => s.TimeSpentSeconds >= 60 && s.TimeSpentSeconds < 180)),
+            ("3–5m", stats.Count(s => s.TimeSpentSeconds >= 180 && s.TimeSpentSeconds < 300)),
+            ("5m+", stats.Count(s => s.TimeSpentSeconds >= 300))
+        });
+
+        var visitsPerDay = daily.Select(d => d.NewVisitors + d.ReturningVisitors).ToList();
+        return new VisitorAnalytics(
+            TotalVisits: events.Count,
+            UniqueVisitors: events.Select(e => e.IpAddress).Distinct().Count(),
+            ReturningVisitors: stats.Count(s => s.VisitCount > 1),
+            AvgTimeSeconds: stats.Count == 0 ? 0 : (int)stats.Average(s => s.TimeSpentSeconds),
+            PeakDayVisits: visitsPerDay.Count == 0 ? 0 : visitsPerDay.Max(),
+            AvgVisitsPerDay: visitsPerDay.Count == 0 ? 0 : Math.Round(visitsPerDay.Average(), 1),
+            Daily: daily,
+            Frequency: frequency,
+            TimeOnSite: timeOnSite);
+    }
+
     /// <summary>Export visitor data — "Export" permission.</summary>
     [HttpGet("export")]
     [Authorize]
@@ -70,6 +131,15 @@ public class VisitorsController : ControllerBase
             return BadRequest(new { message = "IpAddress is required." });
 
         var when = req.VisitAt?.ToUniversalTime() ?? DateTime.UtcNow;
+
+        // Event-level record feeds the daily new-vs-returning analytics
+        _db.VisitEvents.Add(new Domain.VisitEvent
+        {
+            IpAddress = req.IpAddress.Trim(),
+            VisitAtUtc = when,
+            TimeSpentSeconds = Math.Max(0, req.TimeSpentSeconds)
+        });
+
         var stat = await _db.VisitorStats.FirstOrDefaultAsync(v => v.IpAddress == req.IpAddress, ct);
         if (stat is null)
         {
