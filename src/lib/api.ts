@@ -27,11 +27,12 @@ export class ApiError extends Error {
 // ---------------------------------------------------------------- mode probe
 
 export function apiMode(): Promise<"live" | "mock"> {
-  // Mock fallback is intentionally DISABLED. The app always talks to the real
-  // API so login authenticates against the database and any DB/API failure
-  // surfaces as a real error instead of silently using the built-in demo data.
-  // Set VITE_USE_MOCKS=true only if you explicitly want the offline demo back.
-  return Promise.resolve(FORCE_MOCKS ? "mock" : "live");
+  // Use mocks whenever an explicit backend URL is not configured (e.g. the
+  // Lovable preview / static hosting). Set VITE_API_URL to point at the real
+  // ASP.NET Core API for "live" mode. VITE_USE_MOCKS=true forces mocks even
+  // when a base URL is set.
+  if (FORCE_MOCKS || !BASE) return Promise.resolve("mock");
+  return Promise.resolve("live");
 }
 
 // ---------------------------------------------------------------- session
