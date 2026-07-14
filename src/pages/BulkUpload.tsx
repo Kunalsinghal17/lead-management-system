@@ -4,7 +4,7 @@ import { api, ApiError } from "../lib/api";
 import { BulkUploadResult } from "../lib/types";
 
 /**
- * BRDID12 — bulk upload with a validate-first flow:
+ * bulk upload with a validate-first flow:
  *   1) choose file → 2) validation preview (Valid / Error / Duplicate per row)
  *   → 3) import only the valid rows → summary.
  * Duplicate rule: same email already in LMS within the last 7 days = duplicate;

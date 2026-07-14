@@ -80,9 +80,17 @@ export default function AskAI() {
     "Give me an overview of how we are doing right now",
     "Which leads need follow-up?",
     "Show hot leads",
+    "What is our conversion rate?",
+    "How much is our open pipeline worth?",
+    "Show unassigned leads in the central pool",
     "Breakdown by lead source",
+    "Break down leads by stage",
+    "Break down leads by owner",
+    "Break down leads by industry",
     "Lost reason analysis",
-    "Leads older than 5 days"
+    "How many leads are open?",
+    "Leads older than 5 days",
+    "Leads older than 10 days"
   ];
 
   return (

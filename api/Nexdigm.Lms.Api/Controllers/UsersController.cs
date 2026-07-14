@@ -23,7 +23,7 @@ public class UsersController : ControllerBase
         _permissions = permissions;
     }
 
-    /// <summary>Users whose role has the "Own / Handle Leads" permission — valid assignment targets (BRDID04).</summary>
+    /// <summary>Users whose role has the "Own / Handle Leads" permission — valid assignment targets.</summary>
     [HttpGet("assignable")]
     public async Task<ActionResult<List<UserDto>>> Assignable(CancellationToken ct)
     {
@@ -38,7 +38,7 @@ public class UsersController : ControllerBase
             u.ManagerId, u.Manager?.FullName, u.IsActive)).ToList();
     }
 
-    /// <summary>All active users — used for owner dropdowns (BRDID04).</summary>
+    /// <summary>All active users — used for owner dropdowns.</summary>
     [HttpGet]
     public async Task<ActionResult<List<UserDto>>> List(CancellationToken ct)
     {

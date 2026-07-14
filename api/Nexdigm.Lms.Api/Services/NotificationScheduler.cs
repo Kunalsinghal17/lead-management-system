@@ -5,10 +5,10 @@ using Nexdigm.Lms.Api.Domain;
 namespace Nexdigm.Lms.Api.Services;
 
 /// <summary>
-/// BRDID10 — daily 6:00 PM IST sweep over all Open leads:
-///  • missing day-wise update (D1–D5)  → email reminder to owner
-///  • lead open > 5 days               → aging reminder to owner
-///  • lead open > 10 days              → escalation to owner's manager (owner in CC)
+/// Daily 6:00 PM IST sweep over all Open leads:
+///  • missing day-wise update (D1-D5)  -> email reminder to owner
+///  • lead open > 5 days                -> aging reminder to owner
+///  • lead open > 10 days               -> escalation to owner's manager (owner in CC)
 /// Set Notifications:DemoIntervalMinutes > 0 to also run every N minutes while demoing.
 /// </summary>
 public class NotificationScheduler : BackgroundService
@@ -97,7 +97,7 @@ public class NotificationScheduler : BackgroundService
             var owner = lead.AssignedTo;
             var age = LeadRules.AgeDays(lead, nowUtc);
 
-            // 1) Missing day-wise update within the D1–D5 window (owner required)
+            // 1) Missing day-wise update within the D1-D5 window (owner required)
             if (owner is not null && lead.EnquiryType == EnquiryType.Lead)
             {
                 var day = LeadRules.CurrentDayNumber(lead, nowUtc);
@@ -125,7 +125,7 @@ public class NotificationScheduler : BackgroundService
                 aging++;
             }
 
-            // 3) Escalation: open > M days → manager (owner in CC)
+            // 3) Escalation: open > M days -> manager (owner in CC)
             if (age > escalationDays)
             {
                 var managerEmail = owner?.Manager?.Email;

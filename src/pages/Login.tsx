@@ -4,7 +4,7 @@ import { useAuth } from "../lib/auth";
 import NexdigmLogo from "../components/NexdigmLogo";
 
 /**
- * BRDID01 — login. Masked password, generic error messages, credentials
+ * login. Masked password, generic error messages, credentials
  * posted in the body (never the URL). DB auth today, AD-ready backend.
  */
 export default function Login() {
@@ -51,7 +51,7 @@ export default function Login() {
             <span className="text-[#C86AA9]">Every follow-up on time.</span>
           </h1>
           <p className="mt-4 max-w-sm text-sm leading-relaxed text-[#C6BDDD]">
-            Website enquiries flow straight from MarketRAdmin into a single pipeline —
+            Website enquiries flow straight from the Nexdigm website into a single pipeline —
             assigned, tracked day by day, and escalated before anything slips.
           </p>
         </div>

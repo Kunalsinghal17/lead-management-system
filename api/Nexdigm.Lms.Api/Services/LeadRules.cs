@@ -2,7 +2,7 @@ using Nexdigm.Lms.Api.Domain;
 
 namespace Nexdigm.Lms.Api.Services;
 
-/// <summary>Pure business rules shared across the API (BRDID04–BRDID09).</summary>
+/// <summary>Pure business rules shared across the API.</summary>
 public static class LeadRules
 {
     public static readonly string[] PersonalDomains =
@@ -11,7 +11,7 @@ public static class LeadRules
         "rediffmail.com", "icloud.com", "protonmail.com", "aol.com", "live.com", "msn.com"
     };
 
-    /// <summary>Auto logic for "Type of Mail ID" (BRDID11): Professional vs Personal domain.</summary>
+    /// <summary>Auto logic for "Type of Mail ID": Professional vs Personal domain.</summary>
     public static string ClassifyMail(string email)
     {
         var at = email.LastIndexOf('@');
@@ -20,7 +20,7 @@ public static class LeadRules
         return PersonalDomains.Contains(domain) ? "Personal" : "Professional";
     }
 
-    /// <summary>BRDID07 — strict forward-only lifecycle. Returns valid next stages.</summary>
+    /// <summary>Strict forward-only lifecycle. Returns valid next stages.</summary>
     public static LeadStage[] NextStages(LeadStage current) => current switch
     {
         LeadStage.Enquiry  => new[] { LeadStage.Lead },
@@ -32,11 +32,11 @@ public static class LeadRules
     public static bool IsFinal(LeadStatus status) =>
         status is LeadStatus.Won or LeadStatus.Lost or LeadStatus.Closed;
 
-    /// <summary>Lead age in whole days since creation (BRDID10 aging).</summary>
+    /// <summary>Lead age in whole days since creation (aging).</summary>
     public static int AgeDays(Lead lead, DateTime nowUtc) =>
         Math.Max(0, (int)(nowUtc.Date - lead.CreatedAtUtc.Date).TotalDays);
 
-    /// <summary>Day counter for D1–D5: Day 1 = assignment date (BRDID06).</summary>
+    /// <summary>Day counter for D1-D5: Day 1 = assignment date.</summary>
     public static int CurrentDayNumber(Lead lead, DateTime nowUtc)
     {
         if (lead.AssignedAtUtc is null) return 0;

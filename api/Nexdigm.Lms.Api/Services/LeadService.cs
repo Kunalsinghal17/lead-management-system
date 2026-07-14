@@ -56,7 +56,7 @@ public class LeadService
 
     // ---------------------------------------------------------------- creation
 
-    /// <summary>BRDID03 — uniform lead creation used by ingestion, manual entry and bulk upload.</summary>
+    /// <summary>Uniform lead creation used by ingestion, manual entry and bulk upload.</summary>
     public async Task<Lead> CreateLeadAsync(
         LeadSource source,
         string name, string email,
@@ -91,13 +91,13 @@ public class LeadService
             Remarks = remarks?.Trim(),
             Source = source,
             SubmittedAtUtc = submittedAtUtc ?? DateTime.UtcNow,
-            // Defaults per BRDID03/07/08: Stage = Enquiry, Status = Open, unassigned (central pool)
+            // Defaults: Stage = Enquiry, Status = Open, unassigned (central pool)
             Stage = LeadStage.Enquiry,
             Status = LeadStatus.Open,
             EnquiryType = EnquiryType.Unclassified
         };
 
-        // Bulk upload may carry historical stage/status (BRDID12)
+        // Bulk upload may carry historical stage/status
         if (!string.IsNullOrWhiteSpace(stage) && Enum.TryParse<LeadStage>(stage, true, out var st))
             lead.Stage = st;
         if (!string.IsNullOrWhiteSpace(status) && Enum.TryParse<LeadStatus>(status, true, out var s2))
@@ -122,7 +122,7 @@ public class LeadService
         return lead;
     }
 
-    // ---------------------------------------------------------------- assignment (BRDID04)
+    // ---------------------------------------------------------------- assignment
 
     public async Task<Lead> AssignAsync(int leadId, int targetUserId, int actingUserId, UserRole actingRole,
         CancellationToken ct = default)
@@ -159,7 +159,7 @@ public class LeadService
         return lead;
     }
 
-    // ---------------------------------------------------------------- updates (BRDID05, 07, 08, 09)
+    // ---------------------------------------------------------------- updates
 
     public async Task<Lead> UpdateAsync(int leadId, UpdateLeadRequest req, int actingUserId, UserRole actingRole,
         CancellationToken ct = default)
@@ -187,7 +187,7 @@ public class LeadService
             lead.ValueInr = req.ValueInr;
         }
 
-        // --- BRDID05: Enquiry Type classification ---
+        // --- Enquiry Type classification ---
         // Not a process blocker: the owner may re-classify to Not Lead at any point
         // while the lead is still active.
         if (!string.IsNullOrWhiteSpace(req.EnquiryType))
@@ -201,7 +201,7 @@ public class LeadService
             lead.EnquiryType = et;
             if (et == EnquiryType.NotLead)
             {
-                // Auto closure — no stage movement, no follow-ups (BRDID05)
+                // Auto closure — no stage movement, no follow-ups
                 lead.Status = LeadStatus.Closed;
                 lead.ClosedAtUtc = DateTime.UtcNow;
             }
@@ -219,7 +219,7 @@ public class LeadService
             lead.LeadType = lt;
         }
 
-        // --- BRDID07: forward-only stage movement ---
+        // --- Forward-only stage movement ---
         if (!string.IsNullOrWhiteSpace(req.Stage))
         {
             if (!classified)
@@ -234,8 +234,8 @@ public class LeadService
                 var allowed = LeadRules.NextStages(lead.Stage);
                 if (!allowed.Contains(newStage))
                     throw new BusinessRuleException(
-                        $"Invalid stage move: {lead.Stage} → {newStage}. Stages are strictly forward-only " +
-                        "(Enquiry → Lead → Proposal → Won/Lost).");
+                        $"Invalid stage move: {lead.Stage} -> {newStage}. Stages are strictly forward-only " +
+                        "(Enquiry -> Lead -> Proposal -> Won/Lost).");
 
                 lead.Stage = newStage;
                 if (newStage == LeadStage.Won) req = req with { Status = "Won" };
@@ -243,7 +243,7 @@ public class LeadService
             }
         }
 
-        // --- BRDID08 / BRDID09: status and lost reason ---
+        // --- Status and lost reason ---
         if (!string.IsNullOrWhiteSpace(req.Status))
         {
             if (!classified)
@@ -277,7 +277,7 @@ public class LeadService
         }
         else if (!string.IsNullOrWhiteSpace(req.LostReason) || !string.IsNullOrWhiteSpace(req.LostReasonOther))
         {
-            // Editing a saved lost reason afterwards: Admin/Manager only (BRDID09)
+            // Editing a saved lost reason afterwards: Admin/Manager only
             if (!isElevated)
                 throw new BusinessRuleException("Saved Lost Reason can only be edited by Admin/Manager.", 403);
             if (!string.IsNullOrWhiteSpace(req.LostReason)) lead.LostReason = req.LostReason;
@@ -289,7 +289,7 @@ public class LeadService
         return lead;
     }
 
-    // ---------------------------------------------------------------- day updates (BRDID06)
+    // ---------------------------------------------------------------- day updates
 
     public async Task<Lead> AddDayUpdateAsync(int leadId, DayUpdateRequest req, int actingUserId, UserRole actingRole,
         CancellationToken ct = default)

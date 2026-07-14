@@ -92,7 +92,7 @@ public record CreateLeadRequest(
     decimal? ValueInr,
     string? Remarks);
 
-/// <summary>Partial update of manual fields. Nulls mean "no change"; auto fields are never editable (BRDID11).</summary>
+/// <summary>Partial update of manual fields. Nulls mean "no change"; auto fields are never editable.</summary>
 public record UpdateLeadRequest(
     string? EnquiryType,
     string? LeadType,
@@ -107,7 +107,7 @@ public record AssignLeadRequest(int UserId);
 
 public record DayUpdateRequest(int DayNumber, string Note);
 
-// ---------- Ingestion (BRDID02, simulates MarketRAdmin push) ----------
+// ---------- Ingestion (website enquiry push) ----------
 public record IngestEnquiryRequest(
     string? ReportCode,
     string? ReportTitle,
@@ -122,7 +122,7 @@ public record IngestEnquiryRequest(
     string? Details,
     DateTime? SubmittedAt);
 
-// ---------- Visitor analytics (BRDID13) ----------
+// ---------- Visitor analytics ----------
 public record VisitorStatDto(
     int Id,
     string IpAddress,
@@ -147,7 +147,7 @@ public record VisitorAnalytics(
     List<DistributionBucket> Frequency,
     List<DistributionBucket> TimeOnSite);
 
-// ---------- Bulk upload (BRDID12) ----------
+// ---------- Bulk upload ----------
 /// <summary>Row-level preview: RowStatus = Valid | Error | Duplicate.</summary>
 public record BulkRowPreview(
     int Row,

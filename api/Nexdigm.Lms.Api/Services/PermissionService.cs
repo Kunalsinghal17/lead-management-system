@@ -5,7 +5,7 @@ using Nexdigm.Lms.Api.Domain;
 namespace Nexdigm.Lms.Api.Services;
 
 /// <summary>
-/// Central catalogue of customizable permission actions (BRDID01 role/access mapping).
+/// Central catalogue of customizable permission actions (role/access mapping).
 /// Stored per role in the database so Admins can re-map access without a deployment.
 /// </summary>
 public static class PermissionActions
@@ -55,7 +55,7 @@ public static class PermissionActions
             [PageUsersRoles] = "Page: Users & Roles"
         };
 
-    /// <summary>Default matrix — Role Master from the BRD + "leads are handled by Executives".</summary>
+    /// <summary>Default matrix — Role Master plus "leads are handled by Executives".</summary>
     public static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<UserRole, bool>> Defaults =
         new Dictionary<string, IReadOnlyDictionary<UserRole, bool>>
         {
@@ -109,7 +109,7 @@ public class PermissionService
         return PermissionActions.Defaults.TryGetValue(action, out var row) && row[role];
     }
 
-    /// <summary>Throws (→ HTTP 403) when the role lacks the permission.</summary>
+    /// <summary>Throws (-> HTTP 403) when the role lacks the permission.</summary>
     public async Task EnsureAsync(UserRole role, string action, CancellationToken ct = default)
     {
         if (!await IsAllowedAsync(role, action, ct))
@@ -128,7 +128,7 @@ public class PermissionService
         return result;
     }
 
-    /// <summary>Full matrix keyed by display name → role → allowed (shape shared with the frontend).</summary>
+    /// <summary>Full matrix keyed by display name -> role -> allowed (shape shared with the frontend).</summary>
     public async Task<Dictionary<string, Dictionary<string, bool>>> GetMatrixAsync(CancellationToken ct = default)
     {
         var rows = await _db.MasterItems.Where(m => m.Type == Type).ToListAsync(ct);

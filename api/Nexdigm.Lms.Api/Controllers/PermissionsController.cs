@@ -5,7 +5,7 @@ using Nexdigm.Lms.Api.Services;
 namespace Nexdigm.Lms.Api.Controllers;
 
 /// <summary>
-/// Editable role/permission matrix (BRDID01). Reading is open to all signed-in
+/// Editable role/permission matrix. Reading is open to all signed-in
 /// users (the UI adapts to it); editing is strictly Admin.
 /// </summary>
 [ApiController]

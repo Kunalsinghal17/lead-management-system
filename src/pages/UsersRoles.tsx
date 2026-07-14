@@ -14,8 +14,8 @@ const isLocked = (action: string, role: Role) =>
   LOCKED_PERMISSIONS.some(([a, r]) => a === action && r === role);
 
 /**
- * BRDID01 — Users, the EDITABLE role/access matrix (stored in the database,
- * enforced by the API on every request) and the notification outbox (BRDID10).
+ * Users, the EDITABLE role/access matrix (stored in the database,
+ * enforced by the API on every request) and the notification outbox .
  */
 export default function UsersRoles() {
   const { refreshPermissions } = useAuth();
@@ -477,7 +477,7 @@ function AddUserModal({ users, onClose, onAdded }: {
       <form onSubmit={submit} className="relative z-10 w-full max-w-md rounded-lg bg-white p-6 shadow-2xl">
         <h2 className="mb-1 text-lg font-bold text-[#333333]">Add user</h2>
         <p className="mb-4 text-xs text-[#808081]">
-          The manager set here receives this user's 10-day escalations (BRDID10).
+          The manager set here receives this user's 10-day escalations.
         </p>
 
         {error && (

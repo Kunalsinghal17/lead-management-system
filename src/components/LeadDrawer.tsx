@@ -23,7 +23,7 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // Editable manual fields (BRDID11: auto fields stay read-only)
+  // Editable manual fields (auto fields stay read-only)
   const [enquiryType, setEnquiryType] = useState("");
   const [leadType, setLeadType] = useState("");
   const [stage, setStage] = useState<Stage>("Enquiry");
@@ -97,7 +97,7 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
     if (!lead) return;
     setError(null);
 
-    // BRDID09 client-side guard (server enforces too)
+    // client-side guard (server enforces too)
     if (showLostReason && !lostReason) {
       setError("Lost Reason is mandatory when marking a lead as Lost.");
       return;
@@ -445,7 +445,7 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
           </div>
         </div>
 
-        {/* Lost reason (BRDID09) */}
+        {/* Lost reason  */}
         {showLostReason && (
           <div className="mt-3 rounded-lg border border-[#ECCAE0] bg-[#ECCAE0] bg-opacity-30 p-4">
             <div className="mb-2 text-xs font-bold text-[#55204F]">
@@ -477,7 +477,7 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
           </div>
         )}
 
-        {/* Day-wise follow-ups (BRDID06) */}
+        {/* Day-wise follow-ups  */}
         {sectionTitle("Day-wise follow-up (D1–D5)",
           lead.enquiryType !== "Lead" ? "Available once classified as a Lead" : undefined)}
         <div className="space-y-2">
@@ -611,7 +611,7 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
           placeholder="General comments / next steps…"
         />
 
-        {/* Auto fields (BRDID11 — read-only) */}
+        {/* Auto fields (— read-only) */}
         {sectionTitle("Enquiry details", "Auto — read-only")}
         <div className="grid grid-cols-2 gap-x-6 gap-y-3 rounded-lg border border-[#DFDDDD] p-4 text-sm">
           <Field label="Report Code" value={lead.reportCode} />

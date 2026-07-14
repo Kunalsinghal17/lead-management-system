@@ -27,7 +27,7 @@ public class LeadsController : ControllerBase
 
     /// <summary>
     /// Lead list. view = all | my | pool (central pool, unassigned) | notlead.
-    /// Not-Lead pool: Admin sees all; other users see their own (BRDID05).
+    /// Not-Lead pool: Admin sees all; other users see their own.
     /// </summary>
     [HttpGet]
     public async Task<ActionResult<List<LeadDto>>> List(
@@ -104,7 +104,7 @@ public class LeadsController : ControllerBase
         return LeadService.ToDto(lead, names);
     }
 
-    /// <summary>BRDID03 — manual lead creation (permission-controlled via Role Master).</summary>
+    /// <summary>Manual lead creation (permission-controlled via Role Master).</summary>
     [HttpPost]
     public async Task<ActionResult<LeadDto>> Create([FromBody] CreateLeadRequest req, CancellationToken ct)
     {
@@ -120,7 +120,7 @@ public class LeadsController : ControllerBase
         return CreatedAtAction(nameof(Get), new { id = lead.Id }, LeadService.ToDto(lead, names));
     }
 
-    /// <summary>Manual field updates with all BRD business rules enforced server-side.</summary>
+    /// <summary>Manual field updates with all business rules enforced server-side.</summary>
     [HttpPut("{id:int}")]
     public async Task<ActionResult<LeadDto>> Update(int id, [FromBody] UpdateLeadRequest req, CancellationToken ct)
     {
@@ -129,7 +129,7 @@ public class LeadsController : ControllerBase
         return LeadService.ToDto(lead, names);
     }
 
-    /// <summary>BRDID04 — pick from pool (self) or re-assign (Admin/Manager).</summary>
+    /// <summary>Pick from pool (self) or re-assign (Admin/Manager).</summary>
     [HttpPost("{id:int}/assign")]
     public async Task<ActionResult<LeadDto>> Assign(int id, [FromBody] AssignLeadRequest req, CancellationToken ct)
     {
@@ -138,7 +138,7 @@ public class LeadsController : ControllerBase
         return LeadService.ToDto(lead, names);
     }
 
-    /// <summary>BRDID06 — D1–D5 day-wise follow-up updates.</summary>
+    /// <summary>D1-D5 day-wise follow-up updates.</summary>
     [HttpPost("{id:int}/day-updates")]
     public async Task<ActionResult<LeadDto>> AddDayUpdate(int id, [FromBody] DayUpdateRequest req, CancellationToken ct)
     {

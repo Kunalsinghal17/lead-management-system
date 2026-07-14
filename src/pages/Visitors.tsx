@@ -7,7 +7,7 @@ import { formatDateTime, formatDuration } from "../lib/format";
 import { useAuth } from "../lib/auth";
 
 /**
- * BRDID13 — visitor analytics: daily new-vs-returning visits, engagement
+ * visitor analytics: daily new-vs-returning visits, engagement
  * distributions and the per-IP register. Data arrives in real time from the
  * website tracking tool via the ingestion API.
  */

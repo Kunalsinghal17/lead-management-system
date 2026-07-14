@@ -23,7 +23,7 @@ public class VisitorsController : ControllerBase
         _permissions = permissions;
     }
 
-    /// <summary>BRDID13 — visitor timestamping and visit counts.</summary>
+    /// <summary>Visitor timestamping and visit counts.</summary>
     [HttpGet]
     [Authorize]
     public async Task<ActionResult<List<VisitorStatDto>>> List(CancellationToken ct)
@@ -115,8 +115,8 @@ public class VisitorsController : ControllerBase
     }
 
     /// <summary>
-    /// BRDID13 — real-time ingestion from the third-party visitor tracking tool.
-    /// Secured by API key header (X-Api-Key), same trust model as MarketRAdmin ingestion.
+    /// Real-time ingestion from the third-party visitor tracking tool.
+    /// Secured by API key header (X-Api-Key), same trust model as website enquiry ingestion.
     /// </summary>
     [HttpPost("ingest")]
     [AllowAnonymous]

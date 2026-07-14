@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Nexdigm.Lms.Api.Domain;
 
-/// <summary>Application user. DB-backed today; designed so Active Directory (Gene) can plug in later via IAuthProvider.</summary>
+/// <summary>Application user. DB-backed today; designed so Active Directory can plug in later via IAuthProvider.</summary>
 public class User
 {
     public int Id { get; set; }
@@ -17,13 +17,13 @@ public class User
     [MaxLength(500)]
     public string PasswordHash { get; set; } = "";
 
-    /// <summary>AD identifier placeholder (from Gene) for future Active Directory integration.</summary>
+    /// <summary>AD identifier placeholder for future Active Directory integration.</summary>
     [MaxLength(100)]
     public string? AdId { get; set; }
 
     public UserRole Role { get; set; } = UserRole.Basic;
 
-    /// <summary>Reporting manager — target of BRDID10 escalations.</summary>
+    /// <summary>Reporting manager — target of escalations.</summary>
     public int? ManagerId { get; set; }
     public User? Manager { get; set; }
 
@@ -31,7 +31,7 @@ public class User
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 }
 
-/// <summary>The lead record — single source of truth (BRDID11 field catalogue).</summary>
+/// <summary>The lead record — single source of truth (field catalogue).</summary>
 public class Lead
 {
     public int Id { get; set; }
@@ -40,7 +40,7 @@ public class Lead
     [MaxLength(20)]
     public string LeadCode { get; set; } = Guid.NewGuid().ToString("N")[..20];
 
-    // ---- Auto fields (BRDID02 ingestion — read-only for users) ----
+    // ---- Auto fields (ingestion — read-only for users) ----
     [MaxLength(50)]  public string? ReportCode { get; set; }
     [MaxLength(300)] public string? ReportTitle { get; set; }
     [MaxLength(100)] public string? Industry { get; set; }
@@ -60,7 +60,7 @@ public class Lead
 
     public LeadSource Source { get; set; } = LeadSource.Website;
 
-    // ---- Ownership (BRDID04 central assignment) ----
+    // ---- Ownership (central assignment) ----
     public int? AssignedToUserId { get; set; }
     public User? AssignedTo { get; set; }
     public DateTime? AssignedAtUtc { get; set; }
@@ -78,7 +78,7 @@ public class Lead
     [MaxLength(1000)] public string? LostReasonOther { get; set; }
     [MaxLength(2000)] public string? Remarks { get; set; }
 
-    // ---- System tracking (BRDID10) ----
+    // ---- System tracking ----
     public bool NotificationFlag { get; set; }
     public bool EscalationFlag { get; set; }
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
@@ -91,7 +91,7 @@ public class Lead
     public ICollection<LeadDayUpdate> DayUpdates { get; set; } = new List<LeadDayUpdate>();
 }
 
-/// <summary>BRDID06 — day-wise follow-up updates D1..D5 after assignment.</summary>
+/// <summary>Day-wise follow-up updates D1..D5 after assignment.</summary>
 public class LeadDayUpdate
 {
     public int Id { get; set; }
@@ -120,7 +120,7 @@ public class VisitEvent
     public int TimeSpentSeconds { get; set; }
 }
 
-/// <summary>BRDID13 — visitor timestamping and visit counts received from the third-party tool.</summary>
+/// <summary>Visitor timestamping and visit counts received from the third-party tool.</summary>
 public class VisitorStat
 {
     public int Id { get; set; }
@@ -136,7 +136,7 @@ public class VisitorStat
     public DateTime LastVisitAtUtc { get; set; } = DateTime.UtcNow;
 }
 
-/// <summary>BRDID10 — outbound notification/escalation log (also acts as the outbox when SMTP is disabled).</summary>
+/// <summary>Outbound notification/escalation log (also acts as the outbox when SMTP is disabled).</summary>
 public class NotificationLog
 {
     public int Id { get; set; }
@@ -150,20 +150,4 @@ public class NotificationLog
 
     public bool EmailSent { get; set; }
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
-}
-
-/// <summary>Generic dropdown master values (lost reasons, industries, ...).</summary>
-public class MasterItem
-{
-    public int Id { get; set; }
-
-    /// <summary>e.g. "LostReason", "Industry", "Cta"</summary>
-    [MaxLength(50)]
-    public string Type { get; set; } = "";
-
-    [MaxLength(200)]
-    public string Value { get; set; } = "";
-
-    public int SortOrder { get; set; }
-    public bool IsActive { get; set; } = true;
 }

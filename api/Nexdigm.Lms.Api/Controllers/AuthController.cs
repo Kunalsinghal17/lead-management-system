@@ -20,7 +20,7 @@ public class AuthController : ControllerBase
         _config = config;
     }
 
-    /// <summary>BRDID01 — login. Credentials in body (never via URL); errors stay generic.</summary>
+    /// <summary>Login. Credentials in body (never via URL); errors stay generic.</summary>
     [HttpPost("login")]
     [AllowAnonymous]
     public async Task<ActionResult<LoginResponse>> Login([FromBody] LoginRequest request, CancellationToken ct)

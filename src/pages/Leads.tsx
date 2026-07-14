@@ -19,7 +19,7 @@ const PRESET_LABELS: Record<Exclude<Preset, null>, string> = {
   unclassified: "Unclassified enquiries"
 };
 
-/** BRDID11 — Lead Tracker: the master view of every lead. */
+/** Lead Tracker: the master view of every lead. */
 export default function Leads() {
   const { can } = useAuth();
   const navigate = useNavigate();
@@ -263,6 +263,18 @@ export default function Leads() {
           <option value="Manual">Manual</option>
           <option value="BulkUpload">Bulk Upload</option>
         </select>
+        {(search || stage || status || industry || ownerId || source || preset) && (
+          <button
+            onClick={() => {
+              setSearch(""); setStage(""); setStatus(""); setIndustry("");
+              setOwnerId(""); setSource(""); setPreset(null);
+            }}
+            title="Clear all filters"
+            className="flex items-center gap-1 rounded-md border border-[#CAC8C7] px-2 py-1.5 text-xs font-bold text-[#645BA8] hover:bg-[#C6BDDD] hover:bg-opacity-30"
+          >
+            <X size={12} /> Clear filters
+          </button>
+        )}
         <button
           onClick={() => setShowScoringInfo(s => !s)}
           className="ml-auto flex items-center gap-1 text-[11px] font-bold text-[#808081] hover:text-[#645BA8]"
@@ -414,7 +426,7 @@ export default function Leads() {
   );
 }
 
-// ------------------------------------------------------------------ create modal (BRDID03 manual creation)
+// ------------------------------------------------------------------ create modal (manual creation)
 
 function CreateLeadModal({ masters, onClose, onCreated }: {
   masters: Masters;

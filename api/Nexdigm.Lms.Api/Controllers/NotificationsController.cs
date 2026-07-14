@@ -22,7 +22,7 @@ public class NotificationsController : ControllerBase
     }
 
     /// <summary>
-    /// Notification/escalation log (BRDID10). Acts as the email outbox when SMTP is off.
+    /// Notification/escalation log. Acts as the email outbox when SMTP is off.
     /// Admin/Manager see everything; other roles only see notifications addressed to them.
     /// </summary>
     [HttpGet]

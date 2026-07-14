@@ -3,7 +3,7 @@ import { PermissionMatrix, SessionUser } from "./types";
 import { api } from "./api";
 
 /**
- * Session management (BRDID01 + security controls):
+ * Session management (+ security controls):
  *  - JWT kept in sessionStorage (cleared when browser closes; not a cookie)
  *  - automatic logout after a period of inactivity (session timeout)
  *  - live, editable permission matrix drives page/field/action-level access.

@@ -38,8 +38,8 @@ public class DashboardController : ControllerBase
         var (scoped, scope) = await DataScope.ApplyAsync(
             baseQuery, _db, _permissions, User.GetUserId(), User.GetRole(), ct);
 
-        // Small datasets per the BRD workload — aggregate in memory (also keeps
-        // decimal math portable across SQL Server and SQLite).
+        // Small datasets — aggregate in memory (keeps decimal math portable across
+        // SQL Server and SQLite).
         var leads = await scoped.ToListAsync(ct);
 
         var real = leads.Where(l => l.EnquiryType != EnquiryType.NotLead).ToList();
@@ -76,7 +76,7 @@ public class DashboardController : ControllerBase
             Unassigned: real.Count(l => l.AssignedToUserId == null && l.Status == LeadStatus.Open),
             Unclassified: leads.Count(l => l.EnquiryType == EnquiryType.Unclassified && l.Status == LeadStatus.Open));
 
-        // ---- Follow-up adherence (D1–D5 discipline vs the 90% target) ----
+        // ---- Follow-up adherence (D1-D5 discipline vs the 90% target) ----
         var totalDue = 0; var totalFilled = 0; var onTrack = 0; var missed = 0;
         foreach (var l in real.Where(x => x.AssignedToUserId != null && x.EnquiryType == EnquiryType.Lead && x.AssignedAtUtc != null))
         {

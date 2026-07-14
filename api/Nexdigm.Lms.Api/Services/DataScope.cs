@@ -6,8 +6,8 @@ namespace Nexdigm.Lms.Api.Services;
 
 /// <summary>
 /// Role-based data visibility. When a role does NOT have "View All Leads":
-///  - Manager  → own leads + leads of their direct reports (team context)
-///  - Others   → own leads only
+///  - Manager  -> own leads + leads of their direct reports (team context)
+///  - Others   -> own leads only
 /// This applies uniformly to the lead list, dashboard and Ask AI, so every
 /// number a user sees is in their own context.
 /// </summary>

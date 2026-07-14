@@ -13,7 +13,7 @@ var config = builder.Configuration;
 // ---------------------------------------------------------------- database
 // SQL Server first (LocalDB by default). If it is unreachable and
 // Database:AllowSqliteFallback is true, fall back to a local SQLite file so
-// the app still starts on machines without SQL Server ("clone → run").
+// the app still starts on machines without SQL Server ("clone -> run").
 var provider = config["Database:Provider"] ?? "SqlServer";
 
 if (provider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase))
@@ -29,7 +29,7 @@ if (provider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase))
         canConnect = probe.Database.CanConnect();
         if (!canConnect)
         {
-            // Server reachable but DB missing → EnsureCreated will create it. Probe the server itself.
+            // Server reachable but DB missing -> EnsureCreated will create it. Probe the server itself.
             probe.Database.EnsureCreated();
             canConnect = true;
         }
@@ -83,7 +83,7 @@ builder.Services.AddControllers().AddJsonOptions(o =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// ---------------------------------------------------------------- auth (BRDID01)
+// ---------------------------------------------------------------- auth
 var jwtKey = config["Jwt:Key"] ?? throw new InvalidOperationException("Jwt:Key missing");
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -114,7 +114,7 @@ builder.Services.AddCors(o => o.AddPolicy("frontend", p => p
 var app = builder.Build();
 
 // ---------------------------------------------------------------- error handling
-// Business-rule violations → clean JSON with no sensitive details (security control).
+// Business-rule violations -> clean JSON with no sensitive details (security control).
 app.Use(async (context, next) =>
 {
     try

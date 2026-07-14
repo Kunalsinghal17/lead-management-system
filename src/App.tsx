@@ -25,7 +25,7 @@ export const PAGES: { path: string; perm: PermissionAction; element: React.React
 export default function App() {
   const { user, can } = useAuth();
 
-  // BRDID01 / security controls: nothing renders without login.
+  // / security controls: nothing renders without login.
   if (!user) {
     return (
       <Routes>

@@ -1,6 +1,6 @@
 namespace Nexdigm.Lms.Api.Domain;
 
-/// <summary>Application roles as per BRDID01 Role &amp; Access Mapping.</summary>
+/// <summary>Application roles as per the Role &amp; Access Mapping.</summary>
 public enum UserRole
 {
     Admin,
@@ -9,7 +9,7 @@ public enum UserRole
     Basic
 }
 
-/// <summary>BRDID05 — Enquiry Type classification. Mandatory before further processing.</summary>
+/// <summary>Enquiry Type classification. Mandatory before further processing.</summary>
 public enum EnquiryType
 {
     Unclassified,
@@ -25,7 +25,7 @@ public enum LeadType
     Syndicate
 }
 
-/// <summary>BRDID07 — Lifecycle stages. Strict forward-only progression.</summary>
+/// <summary>Lifecycle stages. Strict forward-only progression.</summary>
 public enum LeadStage
 {
     Enquiry,
@@ -35,7 +35,7 @@ public enum LeadStage
     Lost
 }
 
-/// <summary>BRDID08 — Status, independent of stage. Closed is set by the system for Not-Lead.</summary>
+/// <summary>Status, independent of stage. Closed is set by the system for Not-Lead.</summary>
 public enum LeadStatus
 {
     Open,
@@ -44,7 +44,7 @@ public enum LeadStatus
     Closed
 }
 
-/// <summary>How the lead entered the system (BRDID02 / 03 / 12).</summary>
+/// <summary>How the lead entered the system.</summary>
 public enum LeadSource
 {
     Website,
@@ -52,7 +52,7 @@ public enum LeadSource
     BulkUpload
 }
 
-/// <summary>Notification log categories (BRDID10).</summary>
+/// <summary>Notification log categories.</summary>
 public enum NotificationType
 {
     MissingDayUpdate,

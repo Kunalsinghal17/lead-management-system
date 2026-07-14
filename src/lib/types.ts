@@ -234,7 +234,7 @@ export interface CreateLeadPayload {
   remarks?: string;
 }
 
-/** BRDID07 — strict forward-only stage progression. */
+/** strict forward-only stage progression. */
 export const NEXT_STAGES: Record<Stage, Stage[]> = {
   Enquiry: ["Lead"],
   Lead: ["Proposal"],
@@ -248,7 +248,7 @@ export const isFinalStatus = (s: Status) => s === "Won" || s === "Lost" || s ===
 /** Permission matrix shape shared with the API. */
 export type PermissionMatrix = Record<string, Record<string, boolean>>;
 
-/** Display names for the editable ACTION permissions (BRDID01 Role Master). */
+/** Display names for the editable ACTION permissions (Role Master). */
 export const PERMISSION_LABELS: Record<string, string> = {
   ViewAllLeads: "View All Leads",
   OwnLeads: "Own / Handle Leads",

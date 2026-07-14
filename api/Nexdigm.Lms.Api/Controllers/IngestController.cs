@@ -7,9 +7,9 @@ using Nexdigm.Lms.Api.Services;
 namespace Nexdigm.Lms.Api.Controllers;
 
 /// <summary>
-/// BRDID02 — Web ingestion endpoint for MarketRAdmin.
-/// MarketRAdmin pushes each website enquiry here in real time; LMS auto-creates the lead
-/// (BRDID03) and it lands in the central pool (BRDID04). No manual intervention, no email dependency.
+/// Web ingestion endpoint for website enquiries.
+/// The Nexdigm website pushes each enquiry here in real time; LMS auto-creates the lead
+/// and it lands in the central pool. No manual intervention, no email dependency.
 /// </summary>
 [ApiController]
 [Route("api/ingest")]

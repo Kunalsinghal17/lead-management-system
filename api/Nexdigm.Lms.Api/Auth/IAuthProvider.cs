@@ -3,9 +3,9 @@ using Nexdigm.Lms.Api.Domain;
 namespace Nexdigm.Lms.Api.Auth;
 
 /// <summary>
-/// Authentication abstraction (BRDID01).
+/// Authentication abstraction.
 /// Today: DbAuthProvider (database users).
-/// Later: swap in an ActiveDirectoryAuthProvider (AD/Entra ID via Gene) without touching controllers.
+/// Later: swap in an ActiveDirectoryAuthProvider (AD/Entra ID) without touching controllers.
 /// </summary>
 public interface IAuthProvider
 {

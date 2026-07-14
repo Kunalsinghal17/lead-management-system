@@ -178,7 +178,7 @@ public static class DbSeeder
             }
             else if (bucket < 28)
             {
-                // Classified Not-Lead → closed by system
+                // Classified Not-Lead -> closed by system
                 Assign(lead, executives[rnd.Next(executives.Count)], created.AddHours(rnd.Next(1, 24)));
                 lead.EnquiryType = EnquiryType.NotLead;
                 lead.Status = LeadStatus.Closed;
@@ -258,7 +258,7 @@ public static class DbSeeder
         }
     }
 
-    // ------------------------------------------------------------ visitor stats (BRDID13)
+    // ------------------------------------------------------------ visitor stats
 
     private static async Task SeedVisitorsAsync(LmsDbContext db)
     {

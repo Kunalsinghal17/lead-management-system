@@ -7,7 +7,7 @@ using Nexdigm.Lms.Api.Domain;
 namespace Nexdigm.Lms.Api.Services;
 
 /// <summary>
-/// BRDID12 — bulk upload with a two-step flow:
+/// Bulk upload with a two-step flow:
 ///   1) dry run: validate every row, return a full preview (Valid / Error / Duplicate)
 ///   2) import: insert only the valid rows.
 /// Duplicate rule: an email that already exists in LMS counts as a duplicate only when the
@@ -99,7 +99,7 @@ public class ExcelService
             .Where(u => u.IsActive && handlerRoles.Contains(u.Role))
             .ToDictionaryAsync(u => u.Email.ToLowerInvariant(), u => u.Id, ct);
 
-        // email → most recent creation date among active leads (for the duplicate window)
+        // email -> most recent creation date among active leads (for the duplicate window)
         var existing = (await _db.Leads
                 .Where(l => l.IsActive)
                 .Select(l => new { l.Email, l.CreatedAtUtc })

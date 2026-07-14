@@ -19,7 +19,7 @@ public class BulkUploadController : ControllerBase
         _permissions = permissions;
     }
 
-    /// <summary>BRDID12 — downloadable standard Excel template.</summary>
+    /// <summary>Downloadable standard Excel template.</summary>
     [HttpGet("template")]
     public async Task<IActionResult> Template(CancellationToken ct)
     {
@@ -31,7 +31,7 @@ public class BulkUploadController : ControllerBase
     }
 
     /// <summary>
-    /// BRDID12 — two-step import. dryRun=true validates and returns a full row-by-row
+    /// Two-step import. dryRun=true validates and returns a full row-by-row
     /// preview (Valid / Error / Duplicate); dryRun=false imports the valid rows.
     /// </summary>
     [HttpPost]

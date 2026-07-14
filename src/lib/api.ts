@@ -26,28 +26,12 @@ export class ApiError extends Error {
 
 // ---------------------------------------------------------------- mode probe
 
-let modePromise: Promise<"live" | "mock"> | null = null;
-
 export function apiMode(): Promise<"live" | "mock"> {
-  if (FORCE_MOCKS) return Promise.resolve("mock");
-  if (!modePromise) {
-    modePromise = (async () => {
-      try {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 3500);
-        const res = await fetch(`${BASE}/api/health`, { signal: controller.signal });
-        clearTimeout(timer);
-        if (!res.ok) throw new Error("health check failed");
-        const body = await res.json();
-        if (body?.status !== "ok") throw new Error("unexpected health payload");
-        return "live" as const;
-      } catch {
-        console.warn("[LMS] API not reachable — running on built-in demo data (mock mode).");
-        return "mock" as const;
-      }
-    })();
-  }
-  return modePromise;
+  // Mock fallback is intentionally DISABLED. The app always talks to the real
+  // API so login authenticates against the database and any DB/API failure
+  // surfaces as a real error instead of silently using the built-in demo data.
+  // Set VITE_USE_MOCKS=true only if you explicitly want the offline demo back.
+  return Promise.resolve(FORCE_MOCKS ? "mock" : "live");
 }
 
 // ---------------------------------------------------------------- session
@@ -238,7 +222,7 @@ export const api = {
     return http<UserRow[]>("/api/users");
   },
 
-  /** Users whose role can own/handle leads — valid assignment targets (BRDID04). */
+  /** Users whose role can own/handle leads — valid assignment targets . */
   async assignableUsers(): Promise<UserRow[]> {
     if ((await apiMode()) === "mock") return wrapMock(() => mock.mockAssignableUsers());
     return http<UserRow[]>("/api/users/assignable");

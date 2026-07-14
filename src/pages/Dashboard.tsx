@@ -138,7 +138,7 @@ export default function Dashboard() {
             <button
               onClick={simulate}
               className="flex items-center gap-1.5 rounded-md border border-[#C6BDDD] px-3 py-1.5 text-xs font-bold text-[#645BA8] hover:bg-[#C6BDDD] hover:bg-opacity-20"
-              title="Simulate a website enquiry arriving via the MarketRAdmin API"
+              title="Simulate a website enquiry arriving from the Nexdigm website"
             >
               <Zap size={13} /> Simulate web enquiry
             </button>

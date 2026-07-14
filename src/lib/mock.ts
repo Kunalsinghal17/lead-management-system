@@ -3,7 +3,7 @@
  *
  * Activated automatically when the .NET API is not reachable (e.g. Lovable
  * preview, GitHub Pages, or frontend-only development). It mirrors the same
- * business rules the API enforces (BRDID01–13) so the preview behaves like
+ * business rules the API enforces  so the preview behaves like
  * the real system. State lives in memory for the session.
  */
 import {
@@ -73,7 +73,7 @@ const users: MockUser[] = [
 ];
 
 /**
- * Editable role/permission matrix (BRDID01) — same defaults the API seeds.
+ * Editable role/permission matrix  — same defaults the API seeds.
  * Keyed by action → role → allowed.
  */
 const permissionMatrix: Record<string, Record<string, boolean>> = {
@@ -273,7 +273,7 @@ function buildSeedData() {
     leads.push(lead);
   }
 
-  // Visitor stats correlated with lead IPs (BRDID13)
+  // Visitor stats correlated with lead IPs 
   const seen = new Set<string>();
   for (const l of leads.slice(0, 25)) {
     if (!l.ipAddress || seen.has(l.ipAddress)) continue;
@@ -556,7 +556,7 @@ export function mockUpdateLead(leadId: number, req: UpdateLeadPayload, actingUse
     lead.valueInr = req.valueInr;
   }
 
-  // BRDID05 — classification (re-classification allowed while the lead is active)
+  // classification (re-classification allowed while the lead is active)
   if (req.enquiryType) {
     if (wasFinal && !elevated)
       throw new MockApiError("Lead is closed. Only Admin/Manager can re-classify it.", 403);
@@ -579,7 +579,7 @@ export function mockUpdateLead(leadId: number, req: UpdateLeadPayload, actingUse
     lead.leadType = req.leadType;
   }
 
-  // BRDID07 — forward-only stages
+  // forward-only stages
   let statusToApply = req.status;
   if (req.stage && req.stage !== lead.stage) {
     if (!classified) throw new MockApiError("Classify the enquiry (Lead / Not Lead) before moving stages.");
@@ -593,7 +593,7 @@ export function mockUpdateLead(leadId: number, req: UpdateLeadPayload, actingUse
     if (req.stage === "Lost") statusToApply = statusToApply ?? "Lost";
   }
 
-  // BRDID08 / 09 — status + mandatory lost reason
+  // / 09 — status + mandatory lost reason
   if (statusToApply) {
     if (!classified) throw new MockApiError("Classify the enquiry (Lead / Not Lead) before updating status.");
     if (lead.enquiryType === "NotLead") throw new MockApiError("Not-Lead enquiries are closed by the system.");
@@ -934,7 +934,7 @@ export function mockNotifications(currentUserId: number, role: Role): Notificati
   return list.sort((a, b) => b.createdAtUtc.localeCompare(a.createdAtUtc)).slice(0, 200);
 }
 
-/** Mirrors the API's 6 PM sweep (BRDID10) so the demo can trigger it on demand. */
+/** Mirrors the API's 6 PM sweep  so the demo can trigger it on demand. */
 export function mockRunNotificationSweep(): { message: string } {
   refreshAges();
   let count = 0;

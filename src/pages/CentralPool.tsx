@@ -7,7 +7,7 @@ import { MailTypeBadge, SourceBadge } from "../components/Badges";
 import { useAuth } from "../lib/auth";
 
 /**
- * BRDID04 — Central Pool. New leads are visible to all eligible users and
+ * Central Pool. New leads are visible to all eligible users and
  * unassigned; any user can pick a lead for themselves (single active owner).
  * Admin/Manager can hand a lead to anyone.
  */
@@ -80,7 +80,7 @@ export default function CentralPool() {
           <Users className="mx-auto mb-3 text-[#9F91C6]" size={32} />
           <div className="font-bold text-[#333333]">The pool is clear</div>
           <p className="mt-1 text-sm text-[#808081]">
-            Every enquiry has an owner. New website enquiries land here automatically via MarketRAdmin.
+            Every enquiry has an owner. New website enquiries land here automatically from the Nexdigm website.
           </p>
         </div>
       ) : (

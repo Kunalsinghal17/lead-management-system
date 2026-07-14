@@ -20,13 +20,21 @@ export interface NlqAnswer {
 }
 
 const DEFAULT_CHIPS = [
-  "Give me an overview of how we are doing right now",
-  "Which leads need follow-up?",
-  "Breakdown by lead source",
-  "Lost reason analysis",
-  "Show hot leads",
-  "Leads older than 5 days"
-];
+    "Give me an overview of how we are doing right now",
+    "Which leads need follow-up?",
+    "Show hot leads",
+    "What is our conversion rate?",
+    "How much is our open pipeline worth?",
+    "Show unassigned leads in the central pool",
+    "Breakdown by lead source",
+    "Break down leads by stage",
+    "Break down leads by owner",
+    "Break down leads by industry",
+    "Lost reason analysis",
+    "How many leads are open?",
+    "Leads older than 5 days",
+    "Leads older than 10 days"
+  ];
 
 export function answerQuestion(q: string, leads: Lead[], summary: DashboardSummary): NlqAnswer {
   const s = q.toLowerCase();
