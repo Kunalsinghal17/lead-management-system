@@ -6,6 +6,8 @@ import { Lead, LeadFilters, Masters, UserRow } from "../lib/types";
 import { formatInr, ageLabel } from "../lib/format";
 import { MailTypeBadge, ScorePill, SourceBadge, StageBadge, StatusBadge } from "../components/Badges";
 import LeadDrawer from "../components/LeadDrawer";
+import { useDialogDismiss } from "../lib/useDialog";
+import { SkeletonRows } from "../components/Skeleton";
 import { scoreLead } from "../lib/scoring";
 import { useAuth } from "../lib/auth";
 
@@ -37,7 +39,10 @@ export default function Leads() {
   const [preset, setPreset] = useState<Preset>(
     ((location.state as { preset?: string } | null)?.preset as Preset) ?? null
   );
-  const [openLead, setOpenLead] = useState<number | null>(null);
+  const [openLead, setOpenLead] = useState<number | null>(
+    // Deep link from the dashboard's "Recent leads" rows
+    (location.state as { openLeadId?: number } | null)?.openLeadId ?? null
+  );
   const [showCreate, setShowCreate] = useState(false);
   const [showScoringInfo, setShowScoringInfo] = useState(false);
   const [page, setPage] = useState(1);
@@ -130,7 +135,7 @@ export default function Leads() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-[#333333]">Lead Tracker</h1>
-          <p className="text-sm text-[#808081]">
+          <p className="text-sm text-[color:var(--nx-muted)]">
             The master view of every lead — ownership, lifecycle, status and daily follow-ups.
           </p>
         </div>
@@ -157,40 +162,40 @@ export default function Leads() {
       {/* Summary strip */}
       <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
         <div className="rounded-lg border border-[#DFDDDD] p-3">
-          <div className="text-[10px] font-bold uppercase tracking-wide text-[#808081]">Leads & Not Lead</div>
+          <div className="text-[11px] font-bold uppercase tracking-wide text-[color:var(--nx-muted)]">Leads & Not Lead</div>
           <div className="mt-1 flex items-end gap-3">
             <span><span className="text-xl font-bold text-[#333333]">{strip.leads}</span>
-              <span className="ml-1 text-[10px] text-[#808081]">leads</span></span>
-            <span><span className="text-xl font-bold text-[#808081]">{strip.notLead}</span>
-              <span className="ml-1 text-[10px] text-[#808081]">not lead</span></span>
+              <span className="ml-1 text-[11px] text-[color:var(--nx-muted)]">leads</span></span>
+            <span><span className="text-xl font-bold text-[color:var(--nx-muted)]">{strip.notLead}</span>
+              <span className="ml-1 text-[11px] text-[color:var(--nx-muted)]">not lead</span></span>
           </div>
         </div>
         <div className="rounded-lg border border-[#DFDDDD] p-3">
-          <div className="text-[10px] font-bold uppercase tracking-wide text-[#808081]">Open & Closed</div>
+          <div className="text-[11px] font-bold uppercase tracking-wide text-[color:var(--nx-muted)]">Open & Closed</div>
           <div className="mt-1 flex items-end gap-3">
             <span><span className="text-xl font-bold text-[#BC852C]">{strip.open}</span>
-              <span className="ml-1 text-[10px] text-[#808081]">open</span></span>
+              <span className="ml-1 text-[11px] text-[color:var(--nx-muted)]">open</span></span>
             <span><span className="text-xl font-bold text-[#333333]">{strip.closed}</span>
-              <span className="ml-1 text-[10px] text-[#808081]">settled</span></span>
+              <span className="ml-1 text-[11px] text-[color:var(--nx-muted)]">settled</span></span>
           </div>
         </div>
         <div className="rounded-lg border border-[#DFDDDD] p-3">
-          <div className="text-[10px] font-bold uppercase tracking-wide text-[#808081]">Won & Lost</div>
+          <div className="text-[11px] font-bold uppercase tracking-wide text-[color:var(--nx-muted)]">Won & Lost</div>
           <div className="mt-1 flex items-end gap-3">
             <span><span className="text-xl font-bold text-[#2D7D3E]">{strip.won}</span>
-              <span className="ml-1 text-[10px] text-[#808081]">won</span></span>
+              <span className="ml-1 text-[11px] text-[color:var(--nx-muted)]">won</span></span>
             <span><span className="text-xl font-bold text-[#712B69]">{strip.lost}</span>
-              <span className="ml-1 text-[10px] text-[#808081]">lost</span></span>
+              <span className="ml-1 text-[11px] text-[color:var(--nx-muted)]">lost</span></span>
             {strip.winRate !== null && (
-              <span className="text-[10px] text-[#808081]">{strip.winRate}% win rate</span>
+              <span className="text-[11px] text-[color:var(--nx-muted)]">{strip.winRate}% win rate</span>
             )}
           </div>
         </div>
         <div className="rounded-lg border border-[#DFDDDD] p-3">
-          <div className="text-[10px] font-bold uppercase tracking-wide text-[#808081]">Overdue</div>
+          <div className="text-[11px] font-bold uppercase tracking-wide text-[color:var(--nx-muted)]">Overdue</div>
           <div className="mt-1">
             <span className="text-xl font-bold" style={{ color: strip.overdue > 0 ? "#712B69" : "#2D7D3E" }}>{strip.overdue}</span>
-            <span className="ml-1 text-[10px] text-[#808081]">open more than 10 days</span>
+            <span className="ml-1 text-[11px] text-[color:var(--nx-muted)]">open more than 10 days</span>
           </div>
         </div>
       </div>
@@ -204,7 +209,7 @@ export default function Leads() {
             className={`-mb-px border-b-2 px-4 py-2 text-sm font-bold transition-colors ${
               tab === key
                 ? "border-[#645BA8] text-[#645BA8]"
-                : "border-transparent text-[#808081] hover:text-[#333333]"
+                : "border-transparent text-[color:var(--nx-muted)] hover:text-[#333333]"
             }`}
           >
             {label}
@@ -225,7 +230,7 @@ export default function Leads() {
       {/* Filters */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="relative flex items-center">
-          <Search size={14} className="absolute left-2.5 text-[#808081]" />
+          <Search size={14} className="absolute left-2.5 text-[color:var(--nx-muted)]" />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
@@ -236,7 +241,7 @@ export default function Leads() {
           <button
             onClick={askAi}
             title="Answer this question with Ask AI"
-            className="absolute right-1.5 flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-bold text-[#645BA8] hover:bg-[#C6BDDD] hover:bg-opacity-30"
+            className="absolute right-1.5 flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-bold text-[#645BA8] hover:bg-[#C6BDDD] hover:bg-opacity-30"
           >
             <Sparkles size={10} /> Ask AI
           </button>
@@ -277,7 +282,7 @@ export default function Leads() {
         )}
         <button
           onClick={() => setShowScoringInfo(s => !s)}
-          className="ml-auto flex items-center gap-1 text-[11px] font-bold text-[#808081] hover:text-[#645BA8]"
+          className="ml-auto flex items-center gap-1 text-[11px] font-bold text-[color:var(--nx-muted)] hover:text-[#645BA8]"
         >
           <Info size={12} /> How scoring works
         </button>
@@ -286,7 +291,7 @@ export default function Leads() {
       {showScoringInfo && (
         <div className="mb-4 rounded-lg border border-[#C6BDDD] bg-[#C6BDDD] bg-opacity-10 p-4 text-xs text-[#333333]">
           <div className="mb-1 font-bold">How lead scoring works</div>
-          <p className="mb-2 text-[#808081]">
+          <p className="mb-2 text-[color:var(--nx-muted)]">
             A deterministic rule engine rates each open lead's conversion likelihood from signals
             already on the lead — no external AI service, recomputed instantly whenever a lead changes.
           </p>
@@ -298,7 +303,7 @@ export default function Leads() {
             <span><b>Freshness</b> — new enquiries score up; leads aging past 10 days score down</span>
             <span><b>Momentum</b> — Proposal stage and consistent day-wise follow-ups add points</span>
           </div>
-          <p className="mt-2 text-[#808081]">
+          <p className="mt-2 text-[color:var(--nx-muted)]">
             Bands: <b style={{ color: "#712B69" }}>Hot</b> — work it now ·{" "}
             <b style={{ color: "#BC852C" }}>Warm</b> — worth pursuing ·{" "}
             <b style={{ color: "#467082" }}>Cool</b> — low priority. Only Open leads are scored.
@@ -311,7 +316,7 @@ export default function Leads() {
       <div className="overflow-x-auto rounded-lg border border-[#DFDDDD]">
         <table className="w-full min-w-[900px] text-left text-sm">
           <thead className="bg-[#DFDDDD] bg-opacity-30">
-            <tr className="text-xs uppercase tracking-wide text-[#808081]">
+            <tr className="text-xs uppercase tracking-wide text-[color:var(--nx-muted)]">
               <th className="px-4 py-2.5 font-bold">Lead ID</th>
               <th className="px-4 py-2.5 font-bold">Enquiry</th>
               <th className="px-4 py-2.5 font-bold">Industry</th>
@@ -326,10 +331,10 @@ export default function Leads() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={10} className="px-4 py-10 text-center text-[#808081]">Loading leads…</td></tr>
+              <SkeletonRows rows={pageSize > 10 ? 10 : pageSize} cols={10} />
             ) : pageRows.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-4 py-10 text-center text-[#808081]">
+                <td colSpan={10} className="px-4 py-10 text-center text-[color:var(--nx-muted)]">
                   No leads match these filters. Adjust the filters or create a lead to get started.
                 </td>
               </tr>
@@ -345,22 +350,22 @@ export default function Leads() {
                     <td className="px-4 py-3 text-xs font-bold text-[#645BA8]">{l.leadCode}</td>
                     <td className="px-4 py-3">
                       <div className="font-bold text-[#333333]">{l.name}</div>
-                      <div className="flex items-center gap-2 text-xs text-[#808081]">
+                      <div className="flex items-center gap-2 text-xs text-[color:var(--nx-muted)]">
                         {l.email} <MailTypeBadge type={l.mailType} />
                       </div>
                     </td>
                     <td className="px-4 py-3 text-[#333333]">{l.industry ?? "—"}</td>
                     <td className="px-4 py-3">
-                      {l.status === "Open" ? <ScorePill score={sc.score} label={sc.label} /> : <span className="text-xs text-[#808081]">—</span>}
+                      {l.status === "Open" ? <ScorePill score={sc.score} label={sc.label} /> : <span className="text-xs text-[color:var(--nx-muted)]">—</span>}
                     </td>
                     <td className="px-4 py-3 text-xs text-[#333333]">
                       <SourceBadge source={l.source} />
-                      <div className="text-[#808081]">{l.cta ?? "—"}</div>
+                      <div className="text-[color:var(--nx-muted)]">{l.cta ?? "—"}</div>
                     </td>
                     <td className="px-4 py-3"><StageBadge stage={l.stage} /></td>
                     <td className="px-4 py-3"><StatusBadge status={l.status} /></td>
                     <td className="px-4 py-3 text-[#333333]">
-                      {l.assignedToName ?? <span className="italic text-[#808081]">Unassigned</span>}
+                      {l.assignedToName ?? <span className="italic text-[color:var(--nx-muted)]">Unassigned</span>}
                     </td>
                     <td className="px-4 py-3 text-[#333333]">{ageLabel(l.ageDays)}</td>
                     <td className="px-4 py-3 text-right text-[#333333]">{formatInr(l.valueInr)}</td>
@@ -372,7 +377,7 @@ export default function Leads() {
         </table>
       </div>
       {/* Pagination */}
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-[#808081]">
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-[color:var(--nx-muted)]">
         <span>
           Showing {presetFiltered.length === 0 ? 0 : (page - 1) * pageSize + 1}–{Math.min(page * pageSize, presetFiltered.length)} of {presetFiltered.length} leads
         </span>
@@ -388,7 +393,7 @@ export default function Leads() {
           <button
             onClick={() => setPage(p => Math.max(1, p - 1))}
             disabled={page <= 1}
-            className="rounded border border-[#CAC8C7] p-1 disabled:opacity-40"
+            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded border border-[#CAC8C7] disabled:opacity-40"
             aria-label="Previous page"
           >
             <ChevronLeft size={13} />
@@ -397,7 +402,7 @@ export default function Leads() {
           <button
             onClick={() => setPage(p => Math.min(totalPages, p + 1))}
             disabled={page >= totalPages}
-            className="rounded border border-[#CAC8C7] p-1 disabled:opacity-40"
+            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded border border-[#CAC8C7] disabled:opacity-40"
             aria-label="Next page"
           >
             <ChevronRight size={13} />
@@ -439,6 +444,7 @@ function CreateLeadModal({ masters, onClose, onCreated }: {
   });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const panelRef = useDialogDismiss<HTMLFormElement>(onClose);
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }));
@@ -473,46 +479,46 @@ function CreateLeadModal({ masters, onClose, onCreated }: {
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center p-4" role="dialog" aria-modal="true">
       <button className="absolute inset-0" style={{ backgroundColor: "rgba(33, 28, 72, 0.45)" }} onClick={onClose} aria-label="Close" />
-      <form onSubmit={submit} className="relative z-10 w-full max-w-lg rounded-lg bg-white p-6 shadow-2xl">
+      <form ref={panelRef} tabIndex={-1} onSubmit={submit} className="relative z-10 w-full max-w-lg rounded-lg bg-white p-6 shadow-2xl outline-none">
         <h2 className="text-lg font-bold text-[#333333]">Create lead</h2>
-        <p className="mb-4 text-xs text-[#808081]">
+        <p className="mb-4 text-xs text-[color:var(--nx-muted)]">
           Manual creation follows the same schema and defaults as auto-ingested leads.
           New leads start unassigned in the central pool.
         </p>
 
         {error && (
-          <div className="mb-3 rounded-md px-3 py-2 text-sm" style={{ backgroundColor: "#ECCAE0", color: "#55204F" }}>
+          <div role="alert" className="mb-3 rounded-md px-3 py-2 text-sm" style={{ backgroundColor: "#ECCAE0", color: "#55204F" }}>
             {error}
           </div>
         )}
 
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2 sm:col-span-1">
-            <label className="mb-1 block text-xs font-bold text-[#333333]">Name *</label>
-            <input className={input} required maxLength={150} value={form.name} onChange={set("name")} />
+            <label htmlFor="f-name-5" className="mb-1 block text-xs font-bold text-[#333333]">Name *</label>
+            <input id="f-name-5" className={input} required maxLength={150} value={form.name} onChange={set("name")} />
           </div>
           <div className="col-span-2 sm:col-span-1">
-            <label className="mb-1 block text-xs font-bold text-[#333333]">Email *</label>
-            <input className={input} required type="email" maxLength={150} value={form.email} onChange={set("email")} />
+            <label htmlFor="f-email-6" className="mb-1 block text-xs font-bold text-[#333333]">Email *</label>
+            <input id="f-email-6" className={input} required type="email" maxLength={150} value={form.email} onChange={set("email")} />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-bold text-[#333333]">Country code</label>
-            <input className={input} maxLength={5} value={form.countryCode} onChange={set("countryCode")} />
+            <label htmlFor="f-country-code-7" className="mb-1 block text-xs font-bold text-[#333333]">Country code</label>
+            <input id="f-country-code-7" className={input} maxLength={5} value={form.countryCode} onChange={set("countryCode")} />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-bold text-[#333333]">Phone</label>
-            <input className={input} maxLength={15} value={form.phone} onChange={set("phone")} />
+            <label htmlFor="f-phone-8" className="mb-1 block text-xs font-bold text-[#333333]">Phone</label>
+            <input id="f-phone-8" className={input} maxLength={15} value={form.phone} onChange={set("phone")} />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-bold text-[#333333]">Industry</label>
-            <select className={input} value={form.industry} onChange={set("industry")}>
+            <label htmlFor="f-industry-9" className="mb-1 block text-xs font-bold text-[#333333]">Industry</label>
+            <select id="f-industry-9" className={input} value={form.industry} onChange={set("industry")}>
               <option value="">Select…</option>
               {masters.industries.map(i => <option key={i} value={i}>{i}</option>)}
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-bold text-[#333333]">CTA</label>
-            <select className={input} value={form.cta} onChange={set("cta")}>
+            <label htmlFor="f-cta-10" className="mb-1 block text-xs font-bold text-[#333333]">CTA</label>
+            <select id="f-cta-10" className={input} value={form.cta} onChange={set("cta")}>
               <option value="">Select…</option>
               {["Download Report", "Request Sample", "Contact Sales", "Subscribe"].map(c => (
                 <option key={c} value={c}>{c}</option>
@@ -520,20 +526,20 @@ function CreateLeadModal({ masters, onClose, onCreated }: {
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-bold text-[#333333]">Report code</label>
-            <input className={input} maxLength={50} value={form.reportCode} onChange={set("reportCode")} />
+            <label htmlFor="f-report-code-11" className="mb-1 block text-xs font-bold text-[#333333]">Report code</label>
+            <input id="f-report-code-11" className={input} maxLength={50} value={form.reportCode} onChange={set("reportCode")} />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-bold text-[#333333]">Value (INR)</label>
-            <input className={input} type="number" min={0} value={form.valueInr} onChange={set("valueInr")} />
+            <label htmlFor="f-value-inr-12" className="mb-1 block text-xs font-bold text-[#333333]">Value (INR)</label>
+            <input id="f-value-inr-12" className={input} type="number" min={0} value={form.valueInr} onChange={set("valueInr")} />
           </div>
           <div className="col-span-2">
-            <label className="mb-1 block text-xs font-bold text-[#333333]">Report title</label>
-            <input className={input} maxLength={300} value={form.reportTitle} onChange={set("reportTitle")} />
+            <label htmlFor="f-report-title-13" className="mb-1 block text-xs font-bold text-[#333333]">Report title</label>
+            <input id="f-report-title-13" className={input} maxLength={300} value={form.reportTitle} onChange={set("reportTitle")} />
           </div>
           <div className="col-span-2">
-            <label className="mb-1 block text-xs font-bold text-[#333333]">Details / requirement</label>
-            <textarea className={`${input} min-h-[60px]`} maxLength={2000} value={form.details} onChange={set("details")} />
+            <label htmlFor="f-details-requirement-14" className="mb-1 block text-xs font-bold text-[#333333]">Details / requirement</label>
+            <textarea id="f-details-requirement-14" className={`${input} min-h-[60px]`} maxLength={2000} value={form.details} onChange={set("details")} />
           </div>
         </div>
 

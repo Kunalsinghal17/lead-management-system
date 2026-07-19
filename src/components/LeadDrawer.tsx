@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { X, Sparkles, Copy, Check, Trash2, Lock } from "lucide-react";
 import { Lead, Masters, NEXT_STAGES, Stage, UserRow, isFinalStatus } from "../lib/types";
 import { api, ApiError } from "../lib/api";
+import { useDialogDismiss } from "../lib/useDialog";
 import { useAuth } from "../lib/auth";
 import { formatDate, formatDateTime, formatInrFull } from "../lib/format";
 import { scoreLead, draftFollowUpEmail, nextBestAction } from "../lib/scoring";
@@ -225,20 +226,20 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
   if (!lead) {
     return (
       <Overlay onClose={onClose}>
-        <div className="p-10 text-center text-sm text-[#808081]">{error ?? "Loading lead…"}</div>
+        <div className="p-10 text-center text-sm text-[color:var(--nx-muted)]">{error ?? "Loading lead…"}</div>
       </Overlay>
     );
   }
 
   const sectionTitle = (t: string, hint?: string) => (
     <div className="mb-2 mt-6 flex items-center justify-between">
-      <h3 className="text-xs font-bold uppercase tracking-wide text-[#808081]">{t}</h3>
-      {hint && <span className="flex items-center gap-1 text-[11px] text-[#808081]"><Lock size={11} /> {hint}</span>}
+      <h3 className="text-xs font-bold uppercase tracking-wide text-[color:var(--nx-muted)]">{t}</h3>
+      {hint && <span className="flex items-center gap-1 text-[11px] text-[color:var(--nx-muted)]"><Lock size={11} /> {hint}</span>}
     </div>
   );
 
   const input =
-    "w-full rounded-md border border-[#CAC8C7] px-3 py-2 text-sm outline-none focus:border-[#645BA8] disabled:bg-[#DFDDDD] disabled:bg-opacity-40 disabled:text-[#808081]";
+    "w-full rounded-md border border-[#CAC8C7] px-3 py-2 text-sm outline-none focus:border-[#645BA8] disabled:bg-[#DFDDDD] disabled:bg-opacity-40 disabled:text-[color:var(--nx-muted)]";
 
   return (
     <Overlay onClose={onClose}>
@@ -246,7 +247,7 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
       <div className="sticky top-0 z-10 border-b border-[#DFDDDD] bg-white px-6 py-4">
         <div className="flex items-start justify-between">
           <div>
-            <div className="flex items-center gap-2 text-xs text-[#808081]">
+            <div className="flex items-center gap-2 text-xs text-[color:var(--nx-muted)]">
               <span className="font-bold text-[#645BA8]">{lead.leadCode}</span>
               <span>·</span>
               <span>{lead.enquiryType === "Unclassified" ? "Unclassified" : lead.enquiryType === "NotLead" ? "Not Lead" : "Lead"}</span>
@@ -261,11 +262,11 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
           </div>
           <div className="flex items-center gap-1">
             {can("delete") && (
-              <button onClick={remove} title="Delete / inactivate (Admin)" className="rounded p-2 text-[#808081] hover:bg-[#ECCAE0] hover:text-[#55204F]">
+              <button onClick={remove} title="Delete / inactivate (Admin)" className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded text-[color:var(--nx-muted)] hover:bg-[#ECCAE0] hover:text-[#55204F]">
                 <Trash2 size={16} />
               </button>
             )}
-            <button onClick={onClose} className="rounded p-2 text-[#808081] hover:bg-[#DFDDDD]" aria-label="Close">
+            <button onClick={onClose} className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded text-[color:var(--nx-muted)] hover:bg-[#DFDDDD]" aria-label="Close">
               <X size={18} />
             </button>
           </div>
@@ -275,6 +276,8 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
       <div className="px-6 pb-28">
         {(error || notice) && (
           <div
+            role={error ? "alert" : "status"}
+            aria-live="polite"
             className="mt-4 rounded-md px-3 py-2 text-sm font-bold"
             style={error
               ? { backgroundColor: "#ECCAE0", color: "#55204F" }
@@ -287,7 +290,7 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
           <div className="mt-3 flex items-start gap-2 rounded-md border border-[#C6BDDD] bg-[#C6BDDD] bg-opacity-15 px-3 py-2 text-xs text-[#2C2561]">
             <Sparkles size={13} className="mt-0.5 shrink-0 text-[#C86AA9]" />
             <span className="flex-1">{suggestion}</span>
-            <button onClick={() => setSuggestion(null)} className="text-[#808081] hover:text-[#333333]" aria-label="Dismiss">
+            <button onClick={() => setSuggestion(null)} className="text-[color:var(--nx-muted)] hover:text-[#333333]" aria-label="Dismiss">
               <X size={13} />
             </button>
           </div>
@@ -300,7 +303,7 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
             <div className="rounded-lg border border-[#DFDDDD] p-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-bold text-[#333333]">{score.label}</span>
-                <span className="text-sm font-bold text-[#333333]">{score.score}<span className="text-[#808081]">/100</span></span>
+                <span className="text-sm font-bold text-[#333333]">{score.score}<span className="text-[color:var(--nx-muted)]">/100</span></span>
               </div>
               <div className="mt-2 h-1.5 w-full rounded-full bg-[#DFDDDD]">
                 <div
@@ -320,7 +323,7 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
               </ul>
               <div className="mt-3 flex flex-wrap gap-1.5">
                 {score.signals.map((sig, i) => (
-                  <span key={i} className="rounded border border-[#DFDDDD] px-1.5 py-0.5 text-[11px] text-[#808081]">{sig}</span>
+                  <span key={i} className="rounded border border-[#DFDDDD] px-1.5 py-0.5 text-[11px] text-[color:var(--nx-muted)]">{sig}</span>
                 ))}
               </div>
             </div>
@@ -337,8 +340,8 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
         )}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="mb-1 block text-xs font-bold text-[#333333]">Enquiry Handled By</label>
-            <select
+            <label htmlFor="f-enquiry-handled-by-1" className="mb-1 block text-xs font-bold text-[#333333]">Enquiry Handled By</label>
+            <select id="f-enquiry-handled-by-1"
               className={input}
               value={lead.assignedToUserId ?? ""}
               disabled={busy || (lead.assignedToUserId !== null && !elevated) || finalized}
@@ -354,7 +357,7 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
               )}
             </select>
             {lead.assignedToUserId !== null && !elevated && (
-              <p className="mt-1 text-[11px] text-[#808081]">Re-assignment is Admin/Manager only.</p>
+              <p className="mt-1 text-xs text-[color:var(--nx-muted)]">Re-assignment is Admin/Manager only.</p>
             )}
             {lead.assignedToUserId === null && assignable.length > 0 && (
               <button
@@ -367,8 +370,8 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
             )}
           </div>
           <div>
-            <label className="mb-1 block text-xs font-bold text-[#333333]">Enquiry Type</label>
-            <select
+            <label htmlFor="f-enquiry-type-2" className="mb-1 block text-xs font-bold text-[#333333]">Enquiry Type</label>
+            <select id="f-enquiry-type-2"
               className={input}
               value={enquiryType}
               disabled={busy || !canEdit || lead.enquiryType === "NotLead" || (finalized && !elevated)}
@@ -379,7 +382,7 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
               <option value="NotLead">Not Lead</option>
             </select>
             {enquiryType === "NotLead" && lead.enquiryType !== "NotLead" && (
-              <p className="mt-1 text-[11px] font-bold text-[#712B69]">
+              <p className="mt-1 text-xs font-bold text-[#712B69]">
                 Saving will auto-close this enquiry (status → Closed).
               </p>
             )}
@@ -394,8 +397,9 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
             )}
           </div>
           <div>
-            <label className="mb-1 block text-xs font-bold text-[#333333]">Stage {!classified && <span className="font-normal text-[#808081]">— classify first</span>}</label>
+            <label className="mb-1 block text-xs font-bold text-[#333333]">Stage {!classified && <span className="font-normal text-[color:var(--nx-muted)]">— classify first</span>}</label>
             <select
+              aria-label="Stage"
               className={input}
               value={stage}
               disabled={busy || !canEdit || !classified || lead.enquiryType === "NotLead" || finalized}
@@ -403,11 +407,12 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
             >
               {stageOptions.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
-            <p className="mt-1 text-[11px] text-[#808081]">Forward-only: Enquiry → Lead → Proposal → Won/Lost.</p>
+            <p className="mt-1 text-xs text-[color:var(--nx-muted)]">Forward-only: Enquiry → Lead → Proposal → Won/Lost.</p>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-bold text-[#333333]">Status {!classified && <span className="font-normal text-[#808081]">— classify first</span>}</label>
+            <label className="mb-1 block text-xs font-bold text-[#333333]">Status {!classified && <span className="font-normal text-[color:var(--nx-muted)]">— classify first</span>}</label>
             <select
+              aria-label="Status"
               className={input}
               value={status}
               disabled={busy || !canEdit || !classified || lead.enquiryType === "NotLead" || (finalized && !elevated)}
@@ -420,8 +425,8 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-bold text-[#333333]">Lead Type</label>
-            <select
+            <label htmlFor="f-lead-type-3" className="mb-1 block text-xs font-bold text-[#333333]">Lead Type</label>
+            <select id="f-lead-type-3"
               className={input}
               value={leadType}
               disabled={busy || !canEdit || !classified || lead.enquiryType === "NotLead" || finalized}
@@ -432,8 +437,8 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-bold text-[#333333]">Value (INR)</label>
-            <input
+            <label htmlFor="f-value-inr-4" className="mb-1 block text-xs font-bold text-[#333333]">Value (INR)</label>
+            <input id="f-value-inr-4"
               className={input}
               type="number"
               min={0}
@@ -453,6 +458,7 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
             </div>
             <div className="grid grid-cols-2 gap-3">
               <select
+                aria-label="Lost reason"
                 className={input}
                 value={lostReason}
                 disabled={busy || (!canEdit && !elevated) || (!!lead.lostReason && !elevated)}
@@ -463,6 +469,7 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
               </select>
               {lostReason === "Other" && (
                 <input
+                  aria-label="Describe the lost reason"
                   className={input}
                   value={lostOther}
                   disabled={busy}
@@ -472,7 +479,7 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
               )}
             </div>
             {!!lead.lostReason && !elevated && (
-              <p className="mt-1 text-[11px] text-[#808081]">Saved lost reason is editable by Admin/Manager only.</p>
+              <p className="mt-1 text-xs text-[color:var(--nx-muted)]">Saved lost reason is editable by Admin/Manager only.</p>
             )}
           </div>
         )}
@@ -511,15 +518,15 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
               <div key={d} className="rounded-md border border-[#DFDDDD] p-3">
                 <div className="mb-1.5 flex items-center justify-between">
                   <span className="flex items-center gap-2">
-                    <span className="rounded bg-[#211C48] px-1.5 py-0.5 text-[10px] font-bold text-white">D{d}</span>
-                    {dayDate && <span className="text-[11px] text-[#808081]">{formatDate(dayDate.toISOString())}</span>}
+                    <span className="rounded bg-[#211C48] px-1.5 py-0.5 text-[11px] font-bold text-white">D{d}</span>
+                    {dayDate && <span className="text-[11px] text-[color:var(--nx-muted)]">{formatDate(dayDate.toISOString())}</span>}
                     {state && (
-                      <span className="rounded px-1.5 py-0.5 text-[10px] font-bold" style={{ backgroundColor: state.bg, color: state.fg }}>
+                      <span className="rounded px-1.5 py-0.5 text-[11px] font-bold" style={{ backgroundColor: state.bg, color: state.fg }}>
                         {state.label}
                       </span>
                     )}
                   </span>
-                  <span className="text-[11px] text-[#808081]">
+                  <span className="text-[11px] text-[color:var(--nx-muted)]">
                     {existing
                       ? `${existing.updatedBy ?? ""} · ${formatDateTime(existing.updatedAtUtc)}`
                       : prevFilled ? "" : "Fill previous day first"}
@@ -527,6 +534,7 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
                 </div>
                 <div className="flex gap-2">
                   <input
+                    aria-label={`Day ${d} follow-up update`}
                     className={input}
                     value={dayNotes[d] ?? ""}
                     disabled={!editable || busy}
@@ -553,7 +561,7 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
           <>
             {sectionTitle("Follow-up assistant", "Template draft — you review & send")}
             <div className="mb-3 flex items-start gap-2 rounded-md border border-[#D0E7DF] bg-[#D0E7DF] bg-opacity-30 px-3 py-2">
-              <span className="mt-0.5 shrink-0 text-[10px] font-bold uppercase tracking-wide text-[#217A62]">Next best action</span>
+              <span className="mt-0.5 shrink-0 text-[11px] font-bold uppercase tracking-wide text-[#217A62]">Next best action</span>
               <span className="flex-1 text-xs text-[#333333]">{nextBestAction(lead)}</span>
             </div>
             <div className="rounded-lg border border-[#C6BDDD] p-4">
@@ -561,7 +569,7 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <div className="text-sm font-bold text-[#333333]">Draft a follow-up email</div>
-                    <div className="text-xs text-[#808081]">
+                    <div className="text-xs text-[color:var(--nx-muted)]">
                       Personalized from this lead's context and prior day-wise notes. Generated locally — no external AI service.
                     </div>
                   </div>
@@ -604,6 +612,7 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
         {/* Remarks */}
         {sectionTitle("Remarks")}
         <textarea
+          aria-label="Remarks"
           className={`${input} min-h-[70px]`}
           value={remarks}
           disabled={busy || !canEdit || (finalized && !elevated)}
@@ -653,13 +662,14 @@ export default function LeadDrawer({ leadId, masters, users, onClose, onChanged 
 function Field({ label, value, wide }: { label: string; value?: string | null; wide?: boolean }) {
   return (
     <div className={wide ? "col-span-2" : ""}>
-      <div className="text-[11px] font-bold uppercase tracking-wide text-[#808081]">{label}</div>
+      <div className="text-[11px] font-bold uppercase tracking-wide text-[color:var(--nx-muted)]">{label}</div>
       <div className="mt-0.5 break-words text-[#333333]">{value || "—"}</div>
     </div>
   );
 }
 
 function Overlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  const panelRef = useDialogDismiss<HTMLDivElement>(onClose);
   return (
     <div className="fixed inset-0 z-40 flex justify-end" role="dialog" aria-modal="true">
       <button
@@ -668,7 +678,7 @@ function Overlay({ children, onClose }: { children: React.ReactNode; onClose: ()
         onClick={onClose}
         aria-label="Close panel"
       />
-      <div className="relative z-10 flex h-full w-full max-w-xl flex-col overflow-y-auto bg-white shadow-2xl">
+      <div ref={panelRef} tabIndex={-1} className="relative z-10 flex h-full w-full max-w-xl flex-col overflow-y-auto bg-white shadow-2xl outline-none">
         {children}
       </div>
     </div>

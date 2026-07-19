@@ -97,7 +97,7 @@ export default function AskAI() {
     <div className="flex h-[calc(100vh-7.5rem)] flex-col">
       <div className="mb-4">
         <h1 className="text-xl font-bold text-[#333333]">Ask AI</h1>
-        <p className="text-sm text-[#808081]">
+        <p className="text-sm text-[color:var(--nx-muted)]">
           Ask about leads, the pool, follow-ups, conversion or visitors. Answers are computed live from
           your pipeline by a rule-based engine — no data leaves the system.
         </p>
@@ -113,7 +113,7 @@ export default function AskAI() {
               <Sparkles size={20} className="text-white" />
             </div>
             <div className="font-bold text-[#333333]">Ask me anything about your pipeline</div>
-            <p className="mb-4 mt-1 max-w-sm text-sm text-[#808081]">
+            <p className="mb-4 mt-1 max-w-sm text-sm text-[color:var(--nx-muted)]">
               Hi {user?.fullName?.split(" ")[0]} — try one of these to start:
             </p>
             <div className="flex max-w-lg flex-wrap justify-center gap-2">
@@ -135,7 +135,7 @@ export default function AskAI() {
         )}
 
         {thinking && (
-          <div className="flex items-center gap-2 text-sm text-[#808081]">
+          <div className="flex items-center gap-2 text-sm text-[color:var(--nx-muted)]">
             <Sparkles size={14} className="text-[#C86AA9]" /> Analysing your pipeline…
           </div>
         )}
@@ -181,14 +181,14 @@ function AnswerCard({ answer, onChip, onNavigate }: {
       </div>
       <div className="max-w-[85%] flex-1">
         <div className="rounded-2xl rounded-tl-sm border border-[#DFDDDD] p-4">
-          <div className="mb-1 text-xs font-bold uppercase tracking-wide text-[#808081]">{answer.title}</div>
+          <div className="mb-1 text-xs font-bold uppercase tracking-wide text-[color:var(--nx-muted)]">{answer.title}</div>
           <p className="text-sm leading-relaxed text-[#333333]">{answer.text}</p>
 
           {answer.kpis && (
             <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
               {answer.kpis.map(k => (
                 <div key={k.label} className="rounded-md border border-[#DFDDDD] px-3 py-2">
-                  <div className="text-[10px] font-bold uppercase tracking-wide text-[#808081]">{k.label}</div>
+                  <div className="text-[11px] font-bold uppercase tracking-wide text-[color:var(--nx-muted)]">{k.label}</div>
                   <div
                     className="text-lg font-bold"
                     style={{
@@ -209,8 +209,8 @@ function AnswerCard({ answer, onChip, onNavigate }: {
             <div className="mt-3 h-44">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={answer.chart.data} margin={{ top: 4, right: 4, bottom: 0, left: -24 }}>
-                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#808081" }} interval={0} />
-                  <YAxis tick={{ fontSize: 10, fill: "#808081" }} allowDecimals={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: "rgba(51,51,51,0.78)" }} interval={0} />
+                  <YAxis tick={{ fontSize: 10, fill: "rgba(51,51,51,0.78)" }} allowDecimals={false} />
                   <Tooltip contentStyle={{ fontSize: 12, borderColor: "#DFDDDD" }} />
                   <Bar dataKey="value" radius={[4, 4, 0, 0]} name="Count">
                     {answer.chart.data.map((_, i) => (

@@ -7,6 +7,7 @@
  * remains fully interactive.
  */
 import * as mock from "./mock";
+import { logger } from "./logger";
 import {
   BulkUploadResult, CreateLeadPayload, DashboardSummary, Lead, LeadFilters,
   Masters, NotificationRow, PermissionMatrix, Role, SessionUser,
@@ -18,21 +19,23 @@ const FORCE_MOCKS = (import.meta.env.VITE_USE_MOCKS as string | undefined) === "
 
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  /** Server-side reference (X-Error-Id) — grep the API's daily log / ErrorLogs table with it. */
+  errorId?: string;
+  constructor(message: string, status: number, errorId?: string) {
     super(message);
     this.status = status;
+    this.errorId = errorId;
   }
 }
 
 // ---------------------------------------------------------------- mode probe
 
 export function apiMode(): Promise<"live" | "mock"> {
-  // Use mocks whenever an explicit backend URL is not configured (e.g. the
-  // Lovable preview / static hosting). Set VITE_API_URL to point at the real
-  // ASP.NET Core API for "live" mode. VITE_USE_MOCKS=true forces mocks even
-  // when a base URL is set.
-  if (FORCE_MOCKS || !BASE) return Promise.resolve("mock");
-  return Promise.resolve("live");
+  // Mock fallback is intentionally DISABLED. The app always talks to the real
+  // API so login authenticates against the database and any DB/API failure
+  // surfaces as a real error instead of silently using the built-in demo data.
+  // Set VITE_USE_MOCKS=true only if you explicitly want the offline demo back.
+  return Promise.resolve(FORCE_MOCKS ? "mock" : "live");
 }
 
 // ---------------------------------------------------------------- session
@@ -53,21 +56,38 @@ function authHeaders(): Record<string, string> {
 }
 
 async function http<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...authHeaders(),
-      ...(options.headers ?? {})
-    }
-  });
-  if (res.status === 204) return undefined as T;
+  const method = options.method ?? "GET";
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders(),
+        ...(options.headers ?? {})
+      }
+    });
+  } catch (e) {
+    // Network-level failure: API down, CORS, DNS — never reached the server.
+    logger.error(`API unreachable: ${method} ${path}`, e);
+    throw new ApiError("Cannot reach the LMS API — check that it is running.", 0);
+  }
+
+  if (res.status === 204) {
+    logger.trace(`API ${method} ${path} → 204`);
+    return undefined as T;
+  }
   const isJson = res.headers.get("content-type")?.includes("application/json");
   const body = isJson ? await res.json() : null;
   if (!res.ok) {
+    const errorId = (body?.errorId as string | undefined) ?? res.headers.get("X-Error-Id") ?? undefined;
     const message = body?.message ?? `Request failed (${res.status})`;
-    throw new ApiError(message, res.status);
+    const log = `API ${method} ${path} → ${res.status}: ${message}${errorId ? ` [ref ${errorId}]` : ""}`;
+    if (res.status >= 500) logger.error(log);
+    else logger.warn(log);
+    throw new ApiError(message, res.status, errorId);
   }
+  logger.trace(`API ${method} ${path} → ${res.status}`);
   return body as T;
 }
 
@@ -75,7 +95,11 @@ function wrapMock<T>(fn: () => T): T {
   try {
     return fn();
   } catch (e) {
-    if (e instanceof mock.MockApiError) throw new ApiError(e.message, e.status);
+    if (e instanceof mock.MockApiError) {
+      logger.warn(`Mock API rejected: ${e.message}`);
+      throw new ApiError(e.message, e.status);
+    }
+    logger.error("Mock layer crashed", e);
     throw e;
   }
 }
@@ -201,7 +225,11 @@ export const api = {
       return;
     }
     const res = await fetch(`${BASE}/api/leads/export?view=${view}`, { headers: authHeaders() });
-    if (!res.ok) throw new ApiError("Export failed — check your permission.", res.status);
+    if (!res.ok) {
+      logger.warn(`API GET /api/leads/export → ${res.status} [ref ${res.headers.get("X-Error-Id") ?? "-"}]`);
+      throw new ApiError("Export failed — check your permission.", res.status,
+        res.headers.get("X-Error-Id") ?? undefined);
+    }
     downloadBlob(await res.blob(), `nexdigm-leads-${Date.now()}.csv`);
   },
 
@@ -286,7 +314,11 @@ export const api = {
       return;
     }
     const res = await fetch(`${BASE}/api/visitors/export`, { headers: authHeaders() });
-    if (!res.ok) throw new ApiError("Export failed — check your permission.", res.status);
+    if (!res.ok) {
+      logger.warn(`API GET /api/visitors/export → ${res.status} [ref ${res.headers.get("X-Error-Id") ?? "-"}]`);
+      throw new ApiError("Export failed — check your permission.", res.status,
+        res.headers.get("X-Error-Id") ?? undefined);
+    }
     downloadBlob(await res.blob(), `nexdigm-visitor-analytics-${Date.now()}.csv`);
   },
 
@@ -321,7 +353,11 @@ export const api = {
       return;
     }
     const res = await fetch(`${BASE}/api/bulk-upload/template`, { headers: authHeaders() });
-    if (!res.ok) throw new ApiError("Template download failed.", res.status);
+    if (!res.ok) {
+      logger.warn(`API GET /api/bulk-upload/template → ${res.status} [ref ${res.headers.get("X-Error-Id") ?? "-"}]`);
+      throw new ApiError("Template download failed.", res.status,
+        res.headers.get("X-Error-Id") ?? undefined);
+    }
     downloadBlob(await res.blob(), "nexdigm-lms-bulk-upload-template.xlsx",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   },
@@ -344,7 +380,11 @@ export const api = {
       body: form
     });
     const body = await res.json();
-    if (!res.ok) throw new ApiError(body?.message ?? "Upload failed.", res.status);
+    if (!res.ok) {
+      const errorId = (body?.errorId as string | undefined) ?? res.headers.get("X-Error-Id") ?? undefined;
+      logger.warn(`API POST /api/bulk-upload → ${res.status}: ${body?.message ?? "Upload failed."}${errorId ? ` [ref ${errorId}]` : ""}`);
+      throw new ApiError(body?.message ?? "Upload failed.", res.status, errorId);
+    }
     if (!dryRun) notifyDataChanged();
     return body as BulkUploadResult;
   }

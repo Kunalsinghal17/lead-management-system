@@ -68,7 +68,7 @@ export default function BulkUpload() {
     };
     const st = styles[s] ?? styles.Error;
     return (
-      <span className="rounded px-1.5 py-0.5 text-[10px] font-bold" style={{ backgroundColor: st.bg, color: st.fg }}>
+      <span className="rounded px-1.5 py-0.5 text-[11px] font-bold" style={{ backgroundColor: st.bg, color: st.fg }}>
         {s}
       </span>
     );
@@ -101,7 +101,7 @@ export default function BulkUpload() {
               <td className="px-3 py-2 text-[#333333]">{r.handledBy || "—"}</td>
               <td className="px-3 py-2">
                 {statusChip(r.rowStatus)}
-                {r.error && <div className="mt-0.5 text-[10px]" style={{ color: r.rowStatus === "Duplicate" ? "#725220" : "#712B69" }}>{r.error}</div>}
+                {r.error && <div className="mt-0.5 text-[11px]" style={{ color: r.rowStatus === "Duplicate" ? "#725220" : "#712B69" }}>{r.error}</div>}
               </td>
             </tr>
           ))}
@@ -114,7 +114,7 @@ export default function BulkUpload() {
     <div className="max-w-4xl">
       <div className="mb-5">
         <h1 className="text-xl font-bold text-[#333333]">Bulk Upload</h1>
-        <p className="text-sm text-[#808081]">
+        <p className="text-sm text-[color:var(--nx-muted)]">
           Migrate historical or offline leads. Every row is validated first — you review the preview,
           then import only the clean rows. Emails repeated within 7 days are flagged as duplicates;
           older matches count as repeat business.
@@ -126,7 +126,7 @@ export default function BulkUpload() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <div className="text-sm font-bold text-[#333333]">1 · Download the template</div>
-            <p className="mt-1 text-xs text-[#808081]">
+            <p className="mt-1 text-xs text-[color:var(--nx-muted)]">
               Fixed columns: Report Code, Name, Email, Country Code, Phone, Industry, Stage, Status,
               Enquiry Handled By, Value (INR), Remarks. Name and Email are mandatory; "Enquiry Handled By"
               must be an executive's email or blank (stays in the central pool).
@@ -162,7 +162,7 @@ export default function BulkUpload() {
           ) : (
             <>
               <div className="text-sm font-bold text-[#333333]">Drop the file here or click to browse</div>
-              <div className="mt-1 text-xs text-[#808081]">.xlsx (live system) · .csv (preview mode)</div>
+              <div className="mt-1 text-xs text-[color:var(--nx-muted)]">.xlsx (live system) · .csv (preview mode)</div>
             </>
           )}
           <input
@@ -196,7 +196,7 @@ export default function BulkUpload() {
       </div>
 
       {error && (
-        <div className="mb-4 rounded-md px-4 py-3 text-sm font-bold" style={{ backgroundColor: "#ECCAE0", color: "#55204F" }}>
+        <div role="alert" className="mb-4 rounded-md px-4 py-3 text-sm font-bold" style={{ backgroundColor: "#ECCAE0", color: "#55204F" }}>
           {error}
         </div>
       )}
@@ -207,7 +207,7 @@ export default function BulkUpload() {
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="text-sm font-bold text-[#333333]">3 · Review & import</div>
-              <div className="text-xs text-[#808081]">
+              <div className="text-xs text-[color:var(--nx-muted)]">
                 {preview.validRows} valid · {preview.errorRows} errors · {preview.duplicateRows} duplicates.
                 Error and duplicate rows are skipped — fix them in the file and re-validate if needed.
               </div>

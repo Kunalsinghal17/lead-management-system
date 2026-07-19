@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Eye, EyeOff, Lock } from "lucide-react";
 import { useAuth } from "../lib/auth";
+import { apiMode } from "../lib/api";
 import NexdigmLogo from "../components/NexdigmLogo";
 
 /**
@@ -14,6 +15,13 @@ export default function Login() {
   const [show, setShow] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [demoMode, setDemoMode] = useState(false);
+
+  // Demo account hints belong to the preview/demo build only —
+  // never shown when the app runs against the real API.
+  useEffect(() => {
+    apiMode().then(m => setDemoMode(m === "mock")).catch(() => {});
+  }, []);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,7 +64,7 @@ export default function Login() {
           </p>
         </div>
 
-        <p className="text-xs text-[#776DA7]">
+        <p className="text-xs text-[#9F91C6]">
           © {new Date().getFullYear()} Nexdigm Private Limited. Internal use only. Think Next.
         </p>
       </div>
@@ -70,7 +78,7 @@ export default function Login() {
           </div>
 
           <h2 className="text-xl font-bold text-[#333333]">Sign in</h2>
-          <p className="mb-6 mt-1 text-sm text-[#808081]">
+          <p className="mb-6 mt-1 text-sm text-[color:var(--nx-muted)]">
             Use your Nexdigm account. Sessions expire after inactivity.
           </p>
 
@@ -107,7 +115,7 @@ export default function Login() {
             <button
               type="button"
               onClick={() => setShow(s => !s)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-[#808081] hover:text-[#333333]"
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-[color:var(--nx-muted)] hover:text-[#333333]"
               aria-label={show ? "Hide password" : "Show password"}
             >
               {show ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -115,7 +123,7 @@ export default function Login() {
           </div>
 
           {error && (
-            <div className="mb-4 rounded-md px-3 py-2 text-sm" style={{ backgroundColor: "#ECCAE0", color: "#55204F" }}>
+            <div role="alert" className="mb-4 rounded-md px-3 py-2 text-sm" style={{ backgroundColor: "#ECCAE0", color: "#55204F" }}>
               {error}
             </div>
           )}
@@ -129,14 +137,16 @@ export default function Login() {
             {busy ? "Signing in…" : "Sign in"}
           </button>
 
-          <div className="mt-6 flex items-start gap-2 rounded-md bg-[#DFDDDD] bg-opacity-40 p-3 text-xs text-[#808081]">
-            <Lock size={14 } className="mt-0.5 shrink-0" />
-            <span>
-              Demo accounts — harshit.mishra@nexdigm.com / Admin@123 · harsh.mittal@nexdigm.com /
-              Manager@123 · aditi.sharma@nexdigm.com / Exec@123 (also rohan.kulkarni, neha.joshi) ·
-              priyank.desai@nexdigm.com / Basic@123
-            </span>
-          </div>
+          {demoMode && (
+            <div className="mt-6 flex items-start gap-2 rounded-md bg-[#DFDDDD] bg-opacity-40 p-3 text-xs text-[color:var(--nx-muted)]">
+              <Lock size={14} className="mt-0.5 shrink-0" />
+              <span>
+                Preview build — demo accounts: harshit.mishra@nexdigm.com / Admin@123 ·
+                harsh.mittal@nexdigm.com / Manager@123 · aditi.sharma@nexdigm.com / Exec@123
+                (also rohan.kulkarni, neha.joshi) · priyank.desai@nexdigm.com / Basic@123
+              </span>
+            </div>
+          )}
         </form>
       </div>
     </div>

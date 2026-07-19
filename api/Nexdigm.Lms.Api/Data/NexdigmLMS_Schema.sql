@@ -359,3 +359,26 @@ GO
 
 PRINT N'Nexdigm LMS schema ready. Tables, indexes, FKs and master/permission seed applied.';
 GO
+
+/* ============================================================ ERROR LOGGING =
+   dbo.ErrorLogs — one row per unexpected API exception. The API creates this
+   table automatically on first error (Infrastructure/LmsLogging.cs); included
+   here so DBA-managed databases have it up front.
+     SELECT * FROM dbo.ErrorLogs WHERE ErrorId = 'A1B2C3D4';
+   ========================================================================== */
+IF OBJECT_ID(N'dbo.ErrorLogs', N'U') IS NULL
+CREATE TABLE dbo.ErrorLogs (
+    Id INT IDENTITY(1,1) PRIMARY KEY,
+    ErrorId NVARCHAR(12) NOT NULL,
+    Level NVARCHAR(10) NOT NULL,
+    Message NVARCHAR(2000) NOT NULL,
+    Exception NVARCHAR(MAX) NULL,
+    Method NVARCHAR(10) NULL,
+    Path NVARCHAR(500) NULL,
+    UserId INT NULL,
+    UserRole NVARCHAR(20) NULL,
+    StatusCode INT NULL,
+    ElapsedMs BIGINT NULL,
+    CreatedAtUtc DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+);
+GO

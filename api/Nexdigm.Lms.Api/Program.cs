@@ -5,10 +5,20 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Nexdigm.Lms.Api.Auth;
 using Nexdigm.Lms.Api.Data;
+using Nexdigm.Lms.Api.Infrastructure;
 using Nexdigm.Lms.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 var config = builder.Configuration;
+
+// ---------------------------------------------------------------- logging
+// Daily rolling file under /logs (level flag: LmsLogging:Level = All | Info | Error,
+// live-reloaded from appsettings.json) + ErrorLogs DB table for unexpected exceptions.
+var lmsFileWriter = new LmsFileLogWriter(
+    Path.Combine(builder.Environment.ContentRootPath, config["LmsLogging:Directory"] ?? "logs"));
+builder.Logging.AddProvider(new LmsFileLoggerProvider(lmsFileWriter, config));
+builder.Services.AddSingleton(lmsFileWriter);
+builder.Services.AddSingleton<LmsDbErrorSink>();
 
 // ---------------------------------------------------------------- database
 // SQL Server first (LocalDB by default). If it is unreachable and
@@ -115,25 +125,9 @@ var app = builder.Build();
 
 // ---------------------------------------------------------------- error handling
 // Business-rule violations -> clean JSON with no sensitive details (security control).
-app.Use(async (context, next) =>
-{
-    try
-    {
-        await next();
-    }
-    catch (BusinessRuleException ex)
-    {
-        context.Response.StatusCode = ex.StatusCode;
-        context.Response.ContentType = "application/json";
-        await context.Response.WriteAsJsonAsync(new { message = ex.Message });
-    }
-    catch (Exception)
-    {
-        context.Response.StatusCode = 500;
-        context.Response.ContentType = "application/json";
-        await context.Response.WriteAsJsonAsync(new { message = "An unexpected error occurred." });
-    }
-});
+// Global middleware: business rules → clean 4xx, unexpected → 500 with an Error ID
+// that lands in the daily log file and the ErrorLogs table (see Infrastructure/LmsLogging.cs).
+app.UseMiddleware<ErrorHandlingMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {

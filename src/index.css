@@ -19,6 +19,8 @@
   --nx-teal: #26AD8B;
   --nx-orange: #F0AA31;
   --nx-bluegray: #467082;
+  /* WCAG-compliant muted text: rgba of brand Night Gray (~6.3:1 on white) */
+  --nx-muted: rgba(51, 51, 51, 0.78);
 }
 
 html, body, #root {

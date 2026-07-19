@@ -4,6 +4,7 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } fro
 import { api } from "../lib/api";
 import { VisitorAnalytics, VisitorStat } from "../lib/types";
 import { formatDateTime, formatDuration } from "../lib/format";
+import { SkeletonKpis, SkeletonPanel } from "../components/Skeleton";
 import { useAuth } from "../lib/auth";
 
 /**
@@ -43,7 +44,13 @@ export default function Visitors() {
   }, [stats, sort, ipSearch]);
 
   if (loading && !analytics) {
-    return <div className="py-24 text-center text-sm text-[#808081]">Loading visitor analytics…</div>;
+    return (
+      <div role="status" aria-label="Loading visitor analytics">
+        <SkeletonKpis count={4} />
+        <SkeletonPanel height="h-72" />
+        <SkeletonPanel height="h-48" />
+      </div>
+    );
   }
 
   return (
@@ -51,7 +58,7 @@ export default function Visitors() {
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-[#333333]">Visitor Analytics</h1>
-          <p className="text-sm text-[#808081]">
+          <p className="text-sm text-[color:var(--nx-muted)]">
             Time spent & visit count by IP, streamed from the website tracking tool.
           </p>
         </div>
@@ -80,7 +87,7 @@ export default function Visitors() {
             <div className="mb-2 flex items-center justify-between">
               <div>
                 <div className="text-sm font-bold text-[#333333]">Visits per day — new vs returning</div>
-                <div className="text-xs text-[#808081]">
+                <div className="text-xs text-[color:var(--nx-muted)]">
                   Peak {analytics.peakDayVisits}/day · average {analytics.avgVisitsPerDay}/day
                 </div>
               </div>
@@ -89,7 +96,7 @@ export default function Visitors() {
                   <button
                     key={d}
                     onClick={() => { setDays(d); load(d); }}
-                    className={`rounded px-2 py-1 text-xs font-bold ${days === d ? "bg-[#645BA8] text-white" : "text-[#808081] hover:bg-[#DFDDDD]"}`}
+                    className={`rounded px-2 py-1 text-xs font-bold ${days === d ? "bg-[#645BA8] text-white" : "text-[color:var(--nx-muted)] hover:bg-[#DFDDDD]"}`}
                   >
                     {d}D
                   </button>
@@ -101,11 +108,11 @@ export default function Visitors() {
                 <BarChart data={analytics.daily} margin={{ top: 4, right: 4, bottom: 0, left: -24 }} barCategoryGap="20%">
                   <XAxis
                     dataKey="date"
-                    tick={{ fontSize: 10, fill: "#808081" }}
+                    tick={{ fontSize: 10, fill: "rgba(51,51,51,0.78)" }}
                     tickFormatter={(v: string) => v.slice(5)}
                     interval="preserveStartEnd"
                   />
-                  <YAxis tick={{ fontSize: 10, fill: "#808081" }} allowDecimals={false} />
+                  <YAxis tick={{ fontSize: 10, fill: "rgba(51,51,51,0.78)" }} allowDecimals={false} />
                   <Tooltip contentStyle={{ fontSize: 12, borderColor: "#DFDDDD" }} labelStyle={{ color: "#333333", fontWeight: 700 }} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
                   <Bar dataKey="newVisitors" stackId="v" fill="#645BA8" name="New visitor" />
@@ -136,7 +143,7 @@ export default function Visitors() {
       {/* Per-IP register */}
       <div className="mb-3 flex flex-wrap items-center gap-3 text-xs">
         <div className="relative flex items-center">
-          <Search size={13} className="absolute left-2.5 text-[#808081]" />
+          <Search size={13} className="absolute left-2.5 text-[color:var(--nx-muted)]" />
           <input
             value={ipSearch}
             onChange={e => setIpSearch(e.target.value)}
@@ -144,12 +151,12 @@ export default function Visitors() {
             className="w-44 rounded-md border border-[#CAC8C7] py-1.5 pl-8 pr-3 text-xs outline-none focus:border-[#645BA8]"
           />
         </div>
-        <span className="text-[#808081]">Sort by</span>
+        <span className="text-[color:var(--nx-muted)]">Sort by</span>
         {([["recent", "Most recent"], ["visits", "Visit count"], ["time", "Time spent"]] as const).map(([k, label]) => (
           <button
             key={k}
             onClick={() => setSort(k)}
-            className={`rounded px-2 py-1 font-bold ${sort === k ? "bg-[#645BA8] text-white" : "text-[#808081] hover:bg-[#DFDDDD]"}`}
+            className={`rounded px-2 py-1 font-bold ${sort === k ? "bg-[#645BA8] text-white" : "text-[color:var(--nx-muted)] hover:bg-[#DFDDDD]"}`}
           >
             {label}
           </button>
@@ -159,7 +166,7 @@ export default function Visitors() {
       <div className="overflow-hidden rounded-lg border border-[#DFDDDD]">
         <table className="w-full text-left text-sm">
           <thead className="bg-[#DFDDDD] bg-opacity-30">
-            <tr className="text-xs uppercase tracking-wide text-[#808081]">
+            <tr className="text-xs uppercase tracking-wide text-[color:var(--nx-muted)]">
               <th className="px-4 py-2.5 font-bold">IP Address</th>
               <th className="px-4 py-2.5 font-bold">Time Spent</th>
               <th className="px-4 py-2.5 font-bold">No. of Visits</th>
@@ -170,7 +177,7 @@ export default function Visitors() {
           <tbody>
             {sorted.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-12 text-center text-[#808081]">
+                <td colSpan={5} className="px-4 py-12 text-center text-[color:var(--nx-muted)]">
                   <Globe className="mx-auto mb-2 text-[#9F91C6]" size={26} />
                   {ipSearch ? "No IPs match your search." : "No visitor data yet — the tracking tool posts it here in real time."}
                 </td>
@@ -190,8 +197,8 @@ export default function Visitors() {
                       {v.visitCount}
                     </span>
                   </td>
-                  <td className="px-4 py-2.5 text-[#808081]">{formatDateTime(v.firstVisitAtUtc)}</td>
-                  <td className="px-4 py-2.5 text-[#808081]">{formatDateTime(v.lastVisitAtUtc)}</td>
+                  <td className="px-4 py-2.5 text-[color:var(--nx-muted)]">{formatDateTime(v.firstVisitAtUtc)}</td>
+                  <td className="px-4 py-2.5 text-[color:var(--nx-muted)]">{formatDateTime(v.lastVisitAtUtc)}</td>
                 </tr>
               ))
             )}
@@ -205,7 +212,7 @@ export default function Visitors() {
 function Kpi({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-[#DFDDDD] p-4">
-      <div className="text-xs font-bold uppercase tracking-wide text-[#808081]">{label}</div>
+      <div className="text-xs font-bold uppercase tracking-wide text-[color:var(--nx-muted)]">{label}</div>
       <div className="mt-1 text-2xl font-bold text-[#333333]">{value}</div>
     </div>
   );
@@ -221,7 +228,7 @@ function Distribution({ title, subtitle, data, color }: {
   return (
     <div className="rounded-lg border border-[#DFDDDD] p-4">
       <div className="text-sm font-bold text-[#333333]">{title}</div>
-      <div className="mb-3 text-xs text-[#808081]">{subtitle}</div>
+      <div className="mb-3 text-xs text-[color:var(--nx-muted)]">{subtitle}</div>
       <div className="space-y-2.5">
         {data.map(d => (
           <div key={d.name} className="flex items-center gap-3 text-xs">
@@ -233,7 +240,7 @@ function Distribution({ title, subtitle, data, color }: {
               />
             </span>
             <span className="w-8 shrink-0 text-right font-bold text-[#333333]">{d.value}</span>
-            <span className="w-9 shrink-0 text-right text-[#808081]">{d.pct}%</span>
+            <span className="w-9 shrink-0 text-right text-[color:var(--nx-muted)]">{d.pct}%</span>
           </div>
         ))}
       </div>

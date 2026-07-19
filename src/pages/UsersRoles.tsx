@@ -7,6 +7,7 @@ import {
 } from "../lib/types";
 import { formatDateTime } from "../lib/format";
 import { useAuth } from "../lib/auth";
+import { useDialogDismiss } from "../lib/useDialog";
 
 const ROLES: Role[] = ["Admin", "Manager", "Executive", "Basic"];
 
@@ -88,12 +89,12 @@ export default function UsersRoles() {
               title={locked ? "Locked to prevent Admin lockout" : "Click to toggle"}
             >
               <span
-                className="inline-flex h-5 w-9 items-center rounded-full p-0.5 transition-colors"
+                className="inline-flex h-6 w-11 items-center rounded-full p-0.5 transition-colors"
                 style={{ backgroundColor: allowed ? "#2D7D3E" : "#CAC8C7" }}
               >
                 <span
-                  className="h-4 w-4 rounded-full bg-white transition-transform"
-                  style={{ transform: allowed ? "translateX(16px)" : "translateX(0)" }}
+                  className="h-5 w-5 rounded-full bg-white transition-transform"
+                  style={{ transform: allowed ? "translateX(20px)" : "translateX(0)" }}
                 />
               </span>
             </button>
@@ -138,7 +139,7 @@ export default function UsersRoles() {
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-[#333333]">Users & Roles</h1>
-          <p className="text-sm text-[#808081]">
+          <p className="text-sm text-[color:var(--nx-muted)]">
             Access is enforced at page, field and action level — the API validates every request
             independently of the UI.
           </p>
@@ -152,12 +153,12 @@ export default function UsersRoles() {
       </div>
 
       {notice && (
-        <div className="mb-4 rounded-md px-4 py-2.5 text-sm font-bold" style={{ backgroundColor: "#D0E7DF", color: "#195C4A" }}>
+        <div role="status" aria-live="polite" className="mb-4 rounded-md px-4 py-2.5 text-sm font-bold" style={{ backgroundColor: "#D0E7DF", color: "#195C4A" }}>
           {notice}
         </div>
       )}
       {error && (
-        <div className="mb-4 rounded-md px-4 py-2.5 text-sm font-bold" style={{ backgroundColor: "#ECCAE0", color: "#55204F" }}>
+        <div role="alert" className="mb-4 rounded-md px-4 py-2.5 text-sm font-bold" style={{ backgroundColor: "#ECCAE0", color: "#55204F" }}>
           {error}
         </div>
       )}
@@ -166,7 +167,7 @@ export default function UsersRoles() {
       <div className="mb-6 overflow-hidden rounded-lg border border-[#DFDDDD]">
         <table className="w-full text-left text-sm">
           <thead className="bg-[#DFDDDD] bg-opacity-30">
-            <tr className="text-xs uppercase tracking-wide text-[#808081]">
+            <tr className="text-xs uppercase tracking-wide text-[color:var(--nx-muted)]">
               <th className="px-4 py-2.5 font-bold">Name</th>
               <th className="px-4 py-2.5 font-bold">Email</th>
               <th className="px-4 py-2.5 font-bold">Role</th>
@@ -190,7 +191,7 @@ export default function UsersRoles() {
                 <td className="px-4 py-2.5 text-right">
                   <button
                     onClick={() => setEditUser(u)}
-                    className="rounded p-1.5 text-[#808081] hover:bg-[#C6BDDD] hover:bg-opacity-30 hover:text-[#645BA8]"
+                    className="ml-auto flex min-h-[44px] min-w-[44px] items-center justify-center rounded text-[color:var(--nx-muted)] hover:bg-[#C6BDDD] hover:bg-opacity-30 hover:text-[#645BA8]"
                     aria-label={`Edit ${u.fullName}`}
                   >
                     <Pencil size={14} />
@@ -208,7 +209,7 @@ export default function UsersRoles() {
           <div className="flex items-center justify-between border-b border-[#DFDDDD] px-4 py-3">
             <div>
               <div className="text-sm font-bold text-[#333333]">Role & access mapping</div>
-              <div className="text-xs text-[#808081]">
+              <div className="text-xs text-[color:var(--nx-muted)]">
                 Click any cell to toggle, then Save. Settings are stored in the database, enforced by the
                 API on every request, and picked up by running sessions within a minute — no re-login needed.
                 "Manage Users" and "Page: Users & Roles" stay locked for Admin so access can always be recovered.
@@ -235,7 +236,7 @@ export default function UsersRoles() {
           </div>
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="text-xs uppercase tracking-wide text-[#808081]">
+              <tr className="text-xs uppercase tracking-wide text-[color:var(--nx-muted)]">
                 <th className="px-4 py-2 font-bold">Access</th>
                 {ROLES.map(r => (
                   <th key={r} className="px-4 py-2 text-center font-bold">{r}</th>
@@ -244,14 +245,14 @@ export default function UsersRoles() {
             </thead>
             <tbody>
               <tr className="border-t border-[#DFDDDD] bg-[#DFDDDD] bg-opacity-20">
-                <td colSpan={5} className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#645BA8]">
+                <td colSpan={5} className="px-4 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-[#645BA8]">
                   Module access — which pages the role can open
                 </td>
               </tr>
               {Object.keys(PAGE_PERMISSION_LABELS).map(action =>
                 permissionRow(action, PAGE_PERMISSION_LABELS[action]))}
               <tr className="border-t border-[#DFDDDD] bg-[#DFDDDD] bg-opacity-20">
-                <td colSpan={5} className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#645BA8]">
+                <td colSpan={5} className="px-4 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-[#645BA8]">
                   Actions — what the role can do
                 </td>
               </tr>
@@ -267,7 +268,7 @@ export default function UsersRoles() {
         <div className="flex items-center justify-between border-b border-[#DFDDDD] px-4 py-3">
           <div>
             <div className="text-sm font-bold text-[#333333]">Notifications & escalations</div>
-            <div className="text-xs text-[#808081]">
+            <div className="text-xs text-[color:var(--nx-muted)]">
               The system sweeps open leads daily at 6:00 PM IST — missed day updates, 5-day aging
               reminders, 10-day manager escalations.
             </div>
@@ -281,13 +282,13 @@ export default function UsersRoles() {
           </button>
         </div>
         {logs.length === 0 ? (
-          <div className="px-4 py-10 text-center text-sm text-[#808081]">
+          <div className="px-4 py-10 text-center text-sm text-[color:var(--nx-muted)]">
             No notifications yet. Run the sweep to evaluate all open leads against the follow-up rules.
           </div>
         ) : (
           <table className="w-full text-left text-xs">
             <thead className="bg-[#DFDDDD] bg-opacity-30">
-              <tr className="uppercase tracking-wide text-[#808081]">
+              <tr className="uppercase tracking-wide text-[color:var(--nx-muted)]">
                 <th className="px-4 py-2 font-bold">When</th>
                 <th className="px-4 py-2 font-bold">Type</th>
                 <th className="px-4 py-2 font-bold">To</th>
@@ -298,7 +299,7 @@ export default function UsersRoles() {
             <tbody>
               {logs.slice(0, 30).map(n => (
                 <tr key={n.id} className="border-t border-[#DFDDDD]">
-                  <td className="px-4 py-2 text-[#808081]">{formatDateTime(n.createdAtUtc)}</td>
+                  <td className="px-4 py-2 text-[color:var(--nx-muted)]">{formatDateTime(n.createdAtUtc)}</td>
                   <td className="px-4 py-2">
                     <span
                       className="rounded px-1.5 py-0.5 font-bold"
@@ -356,6 +357,7 @@ function EditUserModal({ user, users, onClose, onSaved }: {
   const [newPassword, setNewPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const panelRef = useDialogDismiss<HTMLFormElement>(onClose);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -381,34 +383,34 @@ function EditUserModal({ user, users, onClose, onSaved }: {
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center p-4" role="dialog" aria-modal="true">
       <button className="absolute inset-0" style={{ backgroundColor: "rgba(33, 28, 72, 0.45)" }} onClick={onClose} aria-label="Close" />
-      <form onSubmit={submit} className="relative z-10 w-full max-w-md rounded-lg bg-white p-6 shadow-2xl">
+      <form ref={panelRef} tabIndex={-1} onSubmit={submit} className="relative z-10 w-full max-w-md rounded-lg bg-white p-6 shadow-2xl outline-none">
         <h2 className="mb-1 text-lg font-bold text-[#333333]">Edit user</h2>
-        <p className="mb-4 text-xs text-[#808081]">{user.email}</p>
+        <p className="mb-4 text-xs text-[color:var(--nx-muted)]">{user.email}</p>
 
         {error && (
-          <div className="mb-3 rounded-md px-3 py-2 text-sm" style={{ backgroundColor: "#ECCAE0", color: "#55204F" }}>
+          <div role="alert" className="mb-3 rounded-md px-3 py-2 text-sm" style={{ backgroundColor: "#ECCAE0", color: "#55204F" }}>
             {error}
           </div>
         )}
 
-        <label className="mb-1 block text-xs font-bold text-[#333333]">Full name *</label>
-        <input className={`${input} mb-3`} required maxLength={100} value={fullName} onChange={e => setFullName(e.target.value)} />
+        <label htmlFor="f-full-name-15" className="mb-1 block text-xs font-bold text-[#333333]">Full name *</label>
+        <input id="f-full-name-15" className={`${input} mb-3`} required maxLength={100} value={fullName} onChange={e => setFullName(e.target.value)} />
 
         <div className="mb-3 grid grid-cols-2 gap-3">
           <div>
-            <label className="mb-1 block text-xs font-bold text-[#333333]">Role *</label>
-            <select className={input} value={role} onChange={e => setRole(e.target.value as Role)}>
+            <label htmlFor="f-role-16" className="mb-1 block text-xs font-bold text-[#333333]">Role *</label>
+            <select id="f-role-16" className={input} value={role} onChange={e => setRole(e.target.value as Role)}>
               {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
             </select>
             {role !== user.role && (
-              <p className="mt-1 text-[11px] text-[#808081]">
+              <p className="mt-1 text-xs text-[color:var(--nx-muted)]">
                 Role change applies to their running session within a minute.
               </p>
             )}
           </div>
           <div>
-            <label className="mb-1 block text-xs font-bold text-[#333333]">Reports to</label>
-            <select className={input} value={managerId} onChange={e => setManagerId(e.target.value)}>
+            <label htmlFor="f-reports-to-17" className="mb-1 block text-xs font-bold text-[#333333]">Reports to</label>
+            <select id="f-reports-to-17" className={input} value={managerId} onChange={e => setManagerId(e.target.value)}>
               <option value="">None</option>
               {users
                 .filter(u => u.id !== user.id && (u.role === "Manager" || u.role === "Admin"))
@@ -417,15 +419,15 @@ function EditUserModal({ user, users, onClose, onSaved }: {
           </div>
         </div>
 
-        <label className="mb-1 block text-xs font-bold text-[#333333]">Reset password (optional, min 8 chars)</label>
-        <input className={`${input} mb-3`} type="password" minLength={8} maxLength={100}
+        <label htmlFor="f-reset-password-optional--18" className="mb-1 block text-xs font-bold text-[#333333]">Reset password (optional, min 8 chars)</label>
+        <input id="f-reset-password-optional--18" className={`${input} mb-3`} type="password" minLength={8} maxLength={100}
           value={newPassword} onChange={e => setNewPassword(e.target.value)}
           placeholder="Leave blank to keep the current password" />
 
         <label className="mb-4 flex cursor-pointer items-center gap-2 text-sm text-[#333333]">
           <input type="checkbox" checked={isActive} onChange={e => setIsActive(e.target.checked)} />
           <span className="font-bold">Active</span>
-          <span className="text-xs text-[#808081]">— inactive users cannot sign in or receive leads</span>
+          <span className="text-xs text-[color:var(--nx-muted)]">— inactive users cannot sign in or receive leads</span>
         </label>
 
         <div className="flex justify-end gap-2">
@@ -455,6 +457,7 @@ function AddUserModal({ users, onClose, onAdded }: {
   const [managerId, setManagerId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const panelRef = useDialogDismiss<HTMLFormElement>(onClose);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -474,37 +477,37 @@ function AddUserModal({ users, onClose, onAdded }: {
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center p-4" role="dialog" aria-modal="true">
       <button className="absolute inset-0" style={{ backgroundColor: "rgba(33, 28, 72, 0.45)" }} onClick={onClose} aria-label="Close" />
-      <form onSubmit={submit} className="relative z-10 w-full max-w-md rounded-lg bg-white p-6 shadow-2xl">
+      <form ref={panelRef} tabIndex={-1} onSubmit={submit} className="relative z-10 w-full max-w-md rounded-lg bg-white p-6 shadow-2xl outline-none">
         <h2 className="mb-1 text-lg font-bold text-[#333333]">Add user</h2>
-        <p className="mb-4 text-xs text-[#808081]">
+        <p className="mb-4 text-xs text-[color:var(--nx-muted)]">
           The manager set here receives this user's 10-day escalations.
         </p>
 
         {error && (
-          <div className="mb-3 rounded-md px-3 py-2 text-sm" style={{ backgroundColor: "#ECCAE0", color: "#55204F" }}>
+          <div role="alert" className="mb-3 rounded-md px-3 py-2 text-sm" style={{ backgroundColor: "#ECCAE0", color: "#55204F" }}>
             {error}
           </div>
         )}
 
-        <label className="mb-1 block text-xs font-bold text-[#333333]">Full name *</label>
-        <input className={`${input} mb-3`} required maxLength={100} value={fullName} onChange={e => setFullName(e.target.value)} />
+        <label htmlFor="f-full-name-19" className="mb-1 block text-xs font-bold text-[#333333]">Full name *</label>
+        <input id="f-full-name-19" className={`${input} mb-3`} required maxLength={100} value={fullName} onChange={e => setFullName(e.target.value)} />
 
-        <label className="mb-1 block text-xs font-bold text-[#333333]">Email *</label>
-        <input className={`${input} mb-3`} required type="email" maxLength={150} value={email} onChange={e => setEmail(e.target.value)} />
+        <label htmlFor="f-email-20" className="mb-1 block text-xs font-bold text-[#333333]">Email *</label>
+        <input id="f-email-20" className={`${input} mb-3`} required type="email" maxLength={150} value={email} onChange={e => setEmail(e.target.value)} />
 
-        <label className="mb-1 block text-xs font-bold text-[#333333]">Password * (min 8 chars)</label>
-        <input className={`${input} mb-3`} required type="password" minLength={8} maxLength={100} value={password} onChange={e => setPassword(e.target.value)} />
+        <label htmlFor="f-password-min-8-chars-21" className="mb-1 block text-xs font-bold text-[#333333]">Password * (min 8 chars)</label>
+        <input id="f-password-min-8-chars-21" className={`${input} mb-3`} required type="password" minLength={8} maxLength={100} value={password} onChange={e => setPassword(e.target.value)} />
 
         <div className="mb-4 grid grid-cols-2 gap-3">
           <div>
-            <label className="mb-1 block text-xs font-bold text-[#333333]">Role *</label>
-            <select className={input} value={role} onChange={e => setRole(e.target.value as Role)}>
+            <label htmlFor="f-role-22" className="mb-1 block text-xs font-bold text-[#333333]">Role *</label>
+            <select id="f-role-22" className={input} value={role} onChange={e => setRole(e.target.value as Role)}>
               {["Admin", "Manager", "Executive", "Basic"].map(r => <option key={r} value={r}>{r}</option>)}
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-bold text-[#333333]">Reports to</label>
-            <select className={input} value={managerId} onChange={e => setManagerId(e.target.value)}>
+            <label htmlFor="f-reports-to-23" className="mb-1 block text-xs font-bold text-[#333333]">Reports to</label>
+            <select id="f-reports-to-23" className={input} value={managerId} onChange={e => setManagerId(e.target.value)}>
               <option value="">None</option>
               {users.filter(u => u.role === "Manager" || u.role === "Admin").map(u => (
                 <option key={u.id} value={u.id}>{u.fullName}</option>

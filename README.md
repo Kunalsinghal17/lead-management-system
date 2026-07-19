@@ -222,3 +222,29 @@ Phase-2 candidates left out per the BRD: CRM integrations, ML-based scoring, adv
 dashboards.
 
 © Nexdigm Private Limited — internal use only.
+
+---
+
+## Debugging & logs
+
+**API (server):** every unexpected error gets a short **Error ID** (e.g. `A1B2C3D4`) returned to the UI, written to the daily rolling file `api/**/logs/lms-api-YYYYMMDD.log` (new file each day) and inserted into the `dbo.ErrorLogs` table (created automatically on first error):
+
+```sql
+SELECT * FROM dbo.ErrorLogs WHERE ErrorId = 'A1B2C3D4';
+```
+
+Verbosity is one live-reloaded flag in `appsettings.json` — no restart needed:
+
+| `LmsLogging:Level` | What is written |
+|---|---|
+| `All` | every request line + info logs + errors |
+| `Info` (default) | app info + failed/slow (>3s) requests + errors |
+| `Error` | errors only |
+
+**UI (browser):** a separate client-side log (never sent to the server). The last 300 events live in a per-tab ring buffer; failed API calls are recorded with their server Error ID (`[ref A1B2C3D4]`) so both logs can be joined. A React crash shows a branded recovery screen with Copy details / Download log. From the browser console:
+
+```js
+window.lmsLogger.setLevel("all")   // all | info | error (persists)
+window.lmsLogger.download()        // save the buffer as .txt for a bug report
+window.lmsLogger.entries()         // inspect in-console
+```

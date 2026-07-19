@@ -12,6 +12,7 @@ import { api } from "../lib/api";
 import { DashboardSummary, Lead } from "../lib/types";
 import { formatInr, ageLabel } from "../lib/format";
 import { StageBadge, StatusBadge } from "../components/Badges";
+import { SkeletonDashboard } from "../components/Skeleton";
 import { generateInsights } from "../lib/nlq";
 import { useAuth } from "../lib/auth";
 
@@ -87,7 +88,7 @@ export default function Dashboard() {
   const insights = useMemo(() => (summary ? generateInsights(summary) : null), [summary]);
 
   if (!summary || !insights) {
-    return <div className="py-24 text-center text-sm text-[#808081]">Loading dashboard…</div>;
+    return <SkeletonDashboard />;
   }
 
   const na = summary.needsAttention;
@@ -126,7 +127,7 @@ export default function Dashboard() {
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-[#333333]">Dashboard</h1>
-          <p className="text-sm text-[#808081]">
+          <p className="text-sm text-[color:var(--nx-muted)]">
             Welcome back, {user?.fullName?.split(" ")[0]}.
             {summary.scope === "own" && " Showing your leads only."}
             {summary.scope === "team" && " Showing your team's pipeline."}
@@ -153,7 +154,7 @@ export default function Dashboard() {
       </div>
 
       {toast && (
-        <div className="mb-4 rounded-md px-4 py-2.5 text-sm font-bold" style={{ backgroundColor: "#D0E7DF", color: "#195C4A" }}>
+        <div role="status" aria-live="polite" className="mb-4 rounded-md px-4 py-2.5 text-sm font-bold" style={{ backgroundColor: "#D0E7DF", color: "#195C4A" }}>
           {toast}
         </div>
       )}
@@ -162,7 +163,7 @@ export default function Dashboard() {
       <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
         {kpis.map(k => (
           <div key={k.label} className="rounded-lg border border-[#DFDDDD] p-4">
-            <div className="text-xs font-bold uppercase tracking-wide text-[#808081]">{k.label}</div>
+            <div className="text-xs font-bold uppercase tracking-wide text-[color:var(--nx-muted)]">{k.label}</div>
             <div className="mt-1 text-2xl font-bold text-[#333333]">{k.value}</div>
             <div className="mt-1 flex items-center gap-1 text-xs">
               {k.delta !== null && (
@@ -171,7 +172,7 @@ export default function Dashboard() {
                   {Math.abs(k.delta)}{k.isPts ? "" : "%"}
                 </span>
               )}
-              <span className="text-[#808081]">{k.deltaLabel}</span>
+              <span className="text-[color:var(--nx-muted)]">{k.deltaLabel}</span>
             </div>
           </div>
         ))}
@@ -181,7 +182,7 @@ export default function Dashboard() {
       <div className="mb-6 grid gap-4 lg:grid-cols-3">
         <div className="rounded-lg border border-[#DFDDDD] p-4">
           <div className="text-sm font-bold text-[#333333]">Enquiry classification</div>
-          <div className="text-xs text-[#808081]">Lead vs Not Lead</div>
+          <div className="text-xs text-[color:var(--nx-muted)]">Lead vs Not Lead</div>
           <div className="h-36">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -196,13 +197,13 @@ export default function Dashboard() {
           <div className="grid grid-cols-2 gap-2 text-center">
             <div>
               <div className="text-lg font-bold text-[#645BA8]">{summary.totalLeads}</div>
-              <div className="text-[11px] text-[#808081]">
+              <div className="text-[11px] text-[color:var(--nx-muted)]">
                 Lead · {classTotal === 0 ? 0 : Math.round((100 * summary.totalLeads) / classTotal)}% of total
               </div>
             </div>
             <div>
               <div className="text-lg font-bold text-[#333333]">{summary.closedNotLeads}</div>
-              <div className="text-[11px] text-[#808081]">
+              <div className="text-[11px] text-[color:var(--nx-muted)]">
                 Not Lead · {classTotal === 0 ? 0 : Math.round((100 * summary.closedNotLeads) / classTotal)}% of total
               </div>
             </div>
@@ -213,7 +214,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-1.5 text-sm font-bold text-[#333333]">
             <TriangleAlert size={14} className="text-[#F0AA31]" /> Needs attention
           </div>
-          <div className="mb-2 text-xs text-[#808081]">{summary.openLeads} open — click to drill down</div>
+          <div className="mb-2 text-xs text-[color:var(--nx-muted)]">{summary.openLeads} open — click to drill down</div>
           <div className="space-y-1">
             {attention.map(a => (
               <button
@@ -223,7 +224,7 @@ export default function Dashboard() {
               >
                 <span>
                   <span className="block text-xs font-bold text-[#333333]">{a.label}</span>
-                  <span className="block text-[10px] text-[#808081]">{a.sub}</span>
+                  <span className="block text-[11px] text-[color:var(--nx-muted)]">{a.sub}</span>
                 </span>
                 <span className="flex items-center gap-1">
                   <span className="text-base font-bold" style={{ color: a.color }}>{a.count}</span>
@@ -236,7 +237,7 @@ export default function Dashboard() {
 
         <div className="rounded-lg border border-[#DFDDDD] p-4">
           <div className="text-sm font-bold text-[#333333]">Follow-up adherence</div>
-          <div className="text-xs text-[#808081]">D1–D5 updates vs the {adherenceTarget}% target</div>
+          <div className="text-xs text-[color:var(--nx-muted)]">D1–D5 updates vs the {adherenceTarget}% target</div>
           <div className="flex items-center justify-center py-3">
             <svg width="132" height="132" viewBox="0 0 132 132" role="img"
               aria-label={`Adherence ${summary.adherencePct}%`}>
@@ -257,15 +258,15 @@ export default function Dashboard() {
           <div className="grid grid-cols-3 gap-2 text-center text-xs">
             <div>
               <div className="text-base font-bold text-[#2D7D3E]">{summary.adherenceOnTrack}</div>
-              <div className="text-[10px] uppercase tracking-wide text-[#808081]">On track</div>
+              <div className="text-[11px] uppercase tracking-wide text-[color:var(--nx-muted)]">On track</div>
             </div>
             <div>
               <div className="text-base font-bold text-[#712B69]">{summary.adherenceMissed}</div>
-              <div className="text-[10px] uppercase tracking-wide text-[#808081]">Missed</div>
+              <div className="text-[11px] uppercase tracking-wide text-[color:var(--nx-muted)]">Missed</div>
             </div>
             <div>
               <div className="text-base font-bold" style={{ color: "#BC852C" }}>{adherenceTarget}%</div>
-              <div className="text-[10px] uppercase tracking-wide text-[#808081]">Target</div>
+              <div className="text-[11px] uppercase tracking-wide text-[color:var(--nx-muted)]">Target</div>
             </div>
           </div>
         </div>
@@ -273,13 +274,13 @@ export default function Dashboard() {
 
       {/* AI insights (rule-based) */}
       <div className="mb-6 rounded-lg border border-[#DFDDDD] p-5">
-        <div className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-[#808081]">
+        <div className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-[color:var(--nx-muted)]">
           <Sparkles size={13} className="text-[#C86AA9]" /> Insights — computed from live data, no external AI
         </div>
         <p className="mb-3 text-sm font-bold text-[#333333]">{insights.headline}</p>
         <div className="grid gap-2 md:grid-cols-2">
           <div className="space-y-1.5">
-            <div className="text-[10px] font-bold uppercase tracking-wide text-[#2D7D3E]">Wins</div>
+            <div className="text-[11px] font-bold uppercase tracking-wide text-[#2D7D3E]">Wins</div>
             {insights.wins.map((w, i) => (
               <div key={i} className="flex gap-2 rounded-md bg-[#C4E4C4] bg-opacity-30 px-3 py-2">
                 <span className="shrink-0 text-sm font-bold text-[#2D7D3E]">{w.metric}</span>
@@ -288,7 +289,7 @@ export default function Dashboard() {
             ))}
           </div>
           <div className="space-y-1.5">
-            <div className="text-[10px] font-bold uppercase tracking-wide text-[#712B69]">Risks</div>
+            <div className="text-[11px] font-bold uppercase tracking-wide text-[#712B69]">Risks</div>
             {insights.risks.length === 0 ? (
               <div className="rounded-md bg-[#DFDDDD] bg-opacity-40 px-3 py-2 text-xs text-[#333333]">
                 No material risks detected in this period.
@@ -310,7 +311,7 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="mt-3 flex items-start gap-2 rounded-md border border-[#C6BDDD] bg-[#C6BDDD] bg-opacity-10 px-3 py-2">
-          <span className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#645BA8]">Recommended action</span>
+          <span className="mt-0.5 text-[11px] font-bold uppercase tracking-wide text-[#645BA8]">Recommended action</span>
           <span className="flex-1 text-xs text-[#333333]">{insights.recommendedAction}</span>
         </div>
       </div>
@@ -320,7 +321,7 @@ export default function Dashboard() {
         <div className="mb-4 flex items-center justify-between">
           <div>
             <div className="text-sm font-bold text-[#333333]">Conversion funnel</div>
-            <div className="text-xs text-[#808081]">
+            <div className="text-xs text-[color:var(--nx-muted)]">
               How enquiries progress through Enquiry → Lead → Proposal → Won, with step-by-step conversion.
             </div>
           </div>
@@ -337,7 +338,7 @@ export default function Dashboard() {
             return (
               <div key={step.label}>
                 {i > 0 && step.dropped > 0 && (
-                  <div className="mb-1 flex items-center gap-1.5 pl-1 text-[11px] text-[#808081]">
+                  <div className="mb-1 flex items-center gap-1.5 pl-1 text-[11px] text-[color:var(--nx-muted)]">
                     <TrendingDown size={11} className="text-[#712B69]" />
                     {step.dropped} dropped ({step.stepConv !== null ? 100 - step.stepConv : 0}%)
                     {i === funnel.length - 1 && summary.lostLeads > 0 && ` — includes ${summary.lostLeads} marked Lost`}
@@ -351,11 +352,11 @@ export default function Dashboard() {
                     >
                       <div>
                         <div className="text-xs font-bold leading-tight">{step.label}</div>
-                        <div className="text-[10px] leading-tight opacity-80">{step.hint}</div>
+                        <div className="text-[11px] leading-tight opacity-80">{step.hint}</div>
                       </div>
                       <div className="pl-4 text-right">
                         <div className="text-base font-bold leading-tight">{step.count}</div>
-                        <div className="text-[10px] leading-tight opacity-80">{step.pctOfTotal}% of total</div>
+                        <div className="text-[11px] leading-tight opacity-80">{step.pctOfTotal}% of total</div>
                       </div>
                     </div>
                   </div>
@@ -375,14 +376,14 @@ export default function Dashboard() {
           <div className="mb-2 flex items-center justify-between">
             <div>
               <div className="text-sm font-bold text-[#333333]">Enquiries per day</div>
-              <div className="text-xs text-[#808081]">Auto-ingested + manual + bulk</div>
+              <div className="text-xs text-[color:var(--nx-muted)]">Auto-ingested + manual + bulk</div>
             </div>
             <div className="flex gap-1">
               {[14, 30, 90].map(d => (
                 <button
                   key={d}
                   onClick={() => { setDays(d); load(d); }}
-                  className={`rounded px-2 py-1 text-xs font-bold ${days === d ? "bg-[#645BA8] text-white" : "text-[#808081] hover:bg-[#DFDDDD]"}`}
+                  className={`rounded px-2 py-1 text-xs font-bold ${days === d ? "bg-[#645BA8] text-white" : "text-[color:var(--nx-muted)] hover:bg-[#DFDDDD]"}`}
                 >
                   {d}D
                 </button>
@@ -398,8 +399,8 @@ export default function Dashboard() {
                     <stop offset="100%" stopColor="#645BA8" stopOpacity={0.02} />
                   </linearGradient>
                 </defs>
-                <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#808081" }} tickFormatter={(v: string) => v.slice(5)} interval="preserveStartEnd" />
-                <YAxis tick={{ fontSize: 10, fill: "#808081" }} allowDecimals={false} />
+                <XAxis dataKey="date" tick={{ fontSize: 10, fill: "rgba(51,51,51,0.78)" }} tickFormatter={(v: string) => v.slice(5)} interval="preserveStartEnd" />
+                <YAxis tick={{ fontSize: 10, fill: "rgba(51,51,51,0.78)" }} allowDecimals={false} />
                 <Tooltip contentStyle={{ fontSize: 12, borderColor: "#DFDDDD" }} labelStyle={{ color: "#333333", fontWeight: 700 }} />
                 <Area type="monotone" dataKey="count" stroke="#645BA8" strokeWidth={2} fill="url(#trendFill)" name="Enquiries" />
               </AreaChart>
@@ -409,7 +410,7 @@ export default function Dashboard() {
 
         <div className="rounded-lg border border-[#DFDDDD] p-4">
           <div className="text-sm font-bold text-[#333333]">Lead sources</div>
-          <div className="text-xs text-[#808081]">Website / manual / bulk mix</div>
+          <div className="text-xs text-[color:var(--nx-muted)]">Website / manual / bulk mix</div>
           <div className="h-40">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -439,7 +440,7 @@ export default function Dashboard() {
           <div className="h-48">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={summary.byIndustry.slice(0, 6)} layout="vertical" margin={{ top: 0, right: 8, bottom: 0, left: 0 }}>
-                <XAxis type="number" tick={{ fontSize: 10, fill: "#808081" }} allowDecimals={false} />
+                <XAxis type="number" tick={{ fontSize: 10, fill: "rgba(51,51,51,0.78)" }} allowDecimals={false} />
                 <YAxis type="category" dataKey="name" width={104} interval={0} tick={{ fontSize: 11, fill: "#333333" }} />
                 <Tooltip contentStyle={{ fontSize: 12, borderColor: "#DFDDDD" }} />
                 <Bar dataKey="value" fill="#9F91C6" radius={[0, 4, 4, 0]} name="Leads" />
@@ -450,10 +451,10 @@ export default function Dashboard() {
 
         <div className="rounded-lg border border-[#DFDDDD] p-4">
           <div className="text-sm font-bold text-[#333333]">Team leaderboard</div>
-          <div className="mb-2 text-xs text-[#808081]">Executives by won value</div>
+          <div className="mb-2 text-xs text-[color:var(--nx-muted)]">Executives by won value</div>
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="uppercase tracking-wide text-[#808081]">
+              <tr className="uppercase tracking-wide text-[color:var(--nx-muted)]">
                 <th className="py-1.5 font-bold">Executive</th>
                 <th className="py-1.5 text-center font-bold">Open</th>
                 <th className="py-1.5 text-center font-bold">Won</th>
@@ -463,7 +464,7 @@ export default function Dashboard() {
             </thead>
             <tbody>
               {leaderboard.length === 0 ? (
-                <tr><td colSpan={5} className="py-6 text-center text-[#808081]">No assigned leads yet.</td></tr>
+                <tr><td colSpan={5} className="py-6 text-center text-[color:var(--nx-muted)]">No assigned leads yet.</td></tr>
               ) : (
                 leaderboard.map(r => (
                   <tr key={r.name} className="border-t border-[#DFDDDD]">
@@ -485,7 +486,7 @@ export default function Dashboard() {
         <div className="border-b border-[#DFDDDD] px-4 py-3 text-sm font-bold text-[#333333]">Recent leads</div>
         <table className="w-full text-left text-sm">
           <thead>
-            <tr className="text-xs uppercase tracking-wide text-[#808081]">
+            <tr className="text-xs uppercase tracking-wide text-[color:var(--nx-muted)]">
               <th className="px-4 py-2 font-bold">Lead ID</th>
               <th className="px-4 py-2 font-bold">Name</th>
               <th className="px-4 py-2 font-bold">Industry</th>
@@ -498,14 +499,19 @@ export default function Dashboard() {
           </thead>
           <tbody>
             {leads.slice(0, 8).map(l => (
-              <tr key={l.id} className="border-t border-[#DFDDDD] hover:bg-[#DFDDDD] hover:bg-opacity-20">
+              <tr
+                key={l.id}
+                onClick={() => navigate("/leads", { state: { openLeadId: l.id } })}
+                title={`Open ${l.leadCode} in the Lead Tracker`}
+                className="cursor-pointer border-t border-[#DFDDDD] hover:bg-[#DFDDDD] hover:bg-opacity-20"
+              >
                 <td className="px-4 py-2.5 text-xs font-bold text-[#645BA8]">{l.leadCode}</td>
                 <td className="px-4 py-2.5 font-bold text-[#333333]">{l.name}</td>
                 <td className="px-4 py-2.5 text-[#333333]">{l.industry ?? "—"}</td>
                 <td className="px-4 py-2.5"><StageBadge stage={l.stage} /></td>
                 <td className="px-4 py-2.5"><StatusBadge status={l.status} /></td>
                 <td className="px-4 py-2.5 text-[#333333]">
-                  {l.assignedToName ?? <span className="italic text-[#808081]">Unassigned</span>}
+                  {l.assignedToName ?? <span className="italic text-[color:var(--nx-muted)]">Unassigned</span>}
                 </td>
                 <td className="px-4 py-2.5 text-[#333333]">{ageLabel(l.ageDays)}</td>
                 <td className="px-4 py-2.5 text-right text-[#333333]">{formatInr(l.valueInr)}</td>
