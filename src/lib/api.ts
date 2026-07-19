@@ -31,11 +31,10 @@ export class ApiError extends Error {
 // ---------------------------------------------------------------- mode probe
 
 export function apiMode(): Promise<"live" | "mock"> {
-  // Mock fallback is intentionally DISABLED. The app always talks to the real
-  // API so login authenticates against the database and any DB/API failure
-  // surfaces as a real error instead of silently using the built-in demo data.
-  // Set VITE_USE_MOCKS=true only if you explicitly want the offline demo back.
-  return Promise.resolve(FORCE_MOCKS ? "mock" : "live");
+  // Lovable preview/static hosting has no ASP.NET API behind /api, so relative
+  // calls hit Vite's proxy and fail with 500. Use the in-browser demo backend
+  // unless a real API URL is explicitly configured.
+  return Promise.resolve(FORCE_MOCKS || !BASE ? "mock" : "live");
 }
 
 // ---------------------------------------------------------------- session
